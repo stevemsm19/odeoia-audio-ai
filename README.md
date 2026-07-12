@@ -1,93 +1,365 @@
-# OdeoIA
+# Audio Processor API
 
+This interactive api is designed to process, compress, filter, and summarize voice audio files efficiently.
 
-
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+## Project Structure
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/jala-university1/cohort-2/ES.CSPR-471.GA.T2.26.M1/SB/oscar.munoz/odeoia.git
-git branch -M main
-git push -uf origin main
+/backend            → C# .NET 10 Web API (Clean Architecture)
+/frontend           → TypeScript client (future)
+/infrastructure     → Docker, .env, and this README
+Makefile            → Developer automation commands
 ```
 
-## Integrate with your tools
+# Prerequisites
 
-* [Set up project integrations](https://gitlab.com/jala-university1/cohort-2/ES.CSPR-471.GA.T2.26.M1/SB/oscar.munoz/odeoia/-/settings/integrations)
+| Tool           | Version  | Description                         |
+| -------------- | -------- | ----------------------------------- |
+| .NET SDK       | 10.0     | Backend development                 |
+| Docker         | 24+      | Container execution                 |
+| Docker Compose | v2.x     | Docker orchestration                |
+| make           | Any      | Developer automation commands       |
+| WSL            | Optional | Recommended for Windows development |
 
-## Collaborate with your team
+---
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+# Environment Configuration
 
-## Test and Deploy
+All secrets and connection strings are managed through the `.env` file located at:
 
-Use the built-in continuous integration in GitLab.
+```text
+/infrastructure/.env
+```
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+Create your local environment file:
 
-***
+## macOS / Linux
 
-# Editing this README
+```bash
+cp infrastructure/.env.example infrastructure/.env
+```
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+## Windows PowerShell
 
-## Suggestions for a good README
+```powershell
+Copy-Item infrastructure\.env.example infrastructure\.env
+```
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+Update the file with your credentials:
 
-## Name
-Choose a self-explaining name for your project.
+```env
+DB_CONNECTION_STRING=
+SUPABASE_URL=
+SUPABASE_KEY=
+```
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+---
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+# Local Development
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+The project includes a `Makefile` to simplify common development tasks.
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+To see all available commands:
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+```bash
+make help
+```
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+---
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+# macOS / Linux
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+The Makefile commands work directly.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+Install EF Core CLI tools if needed:
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+```bash
+dotnet tool install --global dotnet-ef
+```
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+Create a new migration:
 
-## License
-For open source projects, say how it is licensed.
+```bash
+make migration name=InitialCreate
+```
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+Apply database migrations:
+
+```bash
+make db-update
+```
+
+Run the API locally:
+
+```bash
+make run
+```
+
+Run unit tests:
+
+```bash
+make test
+```
+
+The API will be available at:
+
+```text
+http://localhost:8080
+```
+
+Swagger UI:
+
+```text
+http://localhost:8080/swagger
+```
+
+---
+
+# Windows
+
+## Option 1: Using WSL (Recommended)
+
+Install and use Windows Subsystem for Linux.
+
+Inside the WSL terminal, all Makefile commands work the same:
+
+```bash
+make migration name=InitialCreate
+make db-update
+make run
+make test
+```
+
+---
+
+## Option 2: Using PowerShell
+
+If you are not using WSL, execute the equivalent commands manually.
+
+Install EF Core CLI:
+
+```powershell
+dotnet tool install --global dotnet-ef
+```
+
+Create a migration:
+
+```powershell
+dotnet ef migrations add InitialCreate `
+  --project backend\src\AudioProcessor.Infrastructure `
+  --startup-project backend\src\AudioProcessor.Api
+```
+
+Apply database migrations:
+
+```powershell
+dotnet ef database update `
+  --project backend\src\AudioProcessor.Infrastructure `
+  --startup-project backend\src\AudioProcessor.Api
+```
+
+Run the API:
+
+```powershell
+dotnet run --project backend\src\AudioProcessor.Api
+```
+
+Run tests:
+
+```powershell
+dotnet test backend\AudioProcessor.slnx
+```
+
+---
+
+# Docker Development
+
+Docker is supported on macOS, Linux, and Windows using Docker Desktop.
+
+The development Docker configuration uses:
+
+```text
+infrastructure/docker-compose.yml
+```
+
+## Build Docker image
+
+Using Make:
+
+```bash
+make docker-build
+```
+
+Equivalent command:
+
+```bash
+cd infrastructure
+docker compose build
+```
+
+---
+
+## Start Docker container
+
+Using Make:
+
+```bash
+make docker-up
+```
+
+Equivalent command:
+
+```bash
+cd infrastructure
+docker compose up --build
+```
+
+---
+
+## Stop Docker container
+
+Using Make:
+
+```bash
+make docker-down
+```
+
+Equivalent command:
+
+```bash
+cd infrastructure
+docker compose down
+```
+
+The API will be available at:
+
+```text
+http://localhost:8080
+```
+
+Swagger UI:
+
+```text
+http://localhost:8080/swagger
+```
+
+---
+
+# Makefile Commands
+
+| Command                               | Description                        |
+| ------------------------------------- | ---------------------------------- |
+| `make help`                           | Show available commands            |
+| `make run`                            | Run the API locally                |
+| `make migration name=<MigrationName>` | Create a new EF Core migration     |
+| `make db-update`                      | Apply pending database migrations  |
+| `make test`                           | Run unit tests                     |
+| `make reset-all`                      | Clean, rebuild and update database |
+| `make docker-build`                   | Build development Docker image     |
+| `make docker-up`                      | Start development Docker container |
+| `make docker-down`                    | Stop development Docker container  |
+
+---
+
+# EF Core Migrations
+
+The project uses Entity Framework Core migrations to manage database schema changes.
+
+Create a migration:
+
+```bash
+make migration name=MigrationName
+```
+
+Equivalent command:
+
+```bash
+dotnet ef migrations add MigrationName `
+  --project backend\src\AudioProcessor.Infrastructure `
+  --startup-project backend\src\AudioProcessor.Api
+```
+
+Apply migrations:
+
+```bash
+make db-update
+```
+
+Equivalent command:
+
+```bash
+dotnet ef database update `
+  --project backend\src\AudioProcessor.Infrastructure `
+  --startup-project backend\src\AudioProcessor.Api
+```
+
+Migration files are stored in:
+
+```text
+backend/src/AudioProcessor.Infrastructure/Persistence/Migrations
+```
+
+---
+
+# Running Tests
+
+Execute unit tests:
+
+```bash
+make test
+```
+
+Equivalent command:
+
+```bash
+dotnet test backend/AudioProcessor.slnx
+```
+
+---
+
+# API Endpoints
+
+| Method | Endpoint            | Description                           |
+| ------ | ------------------- | ------------------------------------- |
+| POST   | `/api/audio/upload` | Upload an `.mp3` or `.wav` audio file |
+
+Example request:
+
+```bash
+curl -X POST http://localhost:8080/api/audio/upload \
+  -F "file=@/path/to/audio.mp3"
+```
+
+Example response:
+
+```json
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "fileName": "audio.mp3",
+  "storageUrl": "https://your-project.supabase.co/storage/v1/object/public/audio-files/uuid/audio.mp3",
+  "createdAt": "2025-01-01T00:00:00Z"
+}
+```
+
+---
+
+# Architecture Overview
+
+This project follows **Clean Architecture**:
+
+```text
+Domain
+ └── Core entities and business rules
+
+Application
+ └── Use cases and interfaces
+
+Infrastructure
+ └── Database, EF Core, repositories and external services
+
+Api
+ └── HTTP controllers, dependency injection and application startup
+
+Tests
+ └── Unit tests
+```

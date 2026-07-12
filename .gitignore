@@ -1,0 +1,33 @@
+# Secrets and environment files
+infrastructure/.env
+backend/src/AudioProcessor.Api/appsettings.Development.json
+
+# .NET build artifacts
+**/bin/
+**/obj/
+*.user
+
+# EF Core migration snapshots backup (keep migrations, ignore swap files)
+*.orig
+
+# IDE and editor directories
+.vs/
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# NuGet packages
+*.nupkg
+.nuget/
+
+# Publish output
+**/publish/
+
+# Logs
+*.log
+
+# Project
+audios/
+docs/
+LAB-TEMPLATE.md
