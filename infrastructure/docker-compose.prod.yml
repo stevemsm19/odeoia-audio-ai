@@ -1,0 +1,8 @@
+services:
+  audio-processor-api:
+    image: odeoia-api:latest
+    env_file:
+      - .env.prod
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+    restart: unless-stopped

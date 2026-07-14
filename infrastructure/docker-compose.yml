@@ -1,0 +1,12 @@
+services:
+  audio-processor-api:
+    build:
+      context: ..
+      dockerfile: infrastructure/Dockerfile
+    container_name: audio-processor-api
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
