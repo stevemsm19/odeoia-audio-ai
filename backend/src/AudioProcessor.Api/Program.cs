@@ -5,6 +5,9 @@ using AudioProcessor.Application.UseCases;
 using AudioProcessor.Infrastructure.Persistence;
 using AudioProcessor.Infrastructure.Persistence.Repositories;
 using AudioProcessor.Infrastructure.Storage;
+using AudioProcessor.Infrastructure.Queue;
+using AudioProcessor.Infrastructure.Services;
+using AudioProcessor.Api.BackgroundServices;
 using AppSupabaseOptions = AudioProcessor.Infrastructure.ExternalServices.SupabaseOptions;
 using DotNetEnv;
 using Microsoft.AspNetCore.Builder;
@@ -73,7 +76,18 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 // Register Application and Infrastructure services
 builder.Services.AddScoped<IAudioRepository, AudioRepository>();
 builder.Services.AddScoped<IAudioStorageService, SupabaseStorageService>();
+builder.Services.AddScoped<IAudioCompressionService, FFmpegAudioCompressionService>();
 builder.Services.AddScoped<UploadAudioUseCase>();
+builder.Services.AddScoped<ProcessAudioCompressionCommandHandler>();
+
+// Register Singleton Background Queue
+builder.Services.AddSingleton<IBackgroundJobQueue, ChannelBackgroundJobQueue>();
+
+// Register Background Worker
+builder.Services.AddHostedService<AudioProcessingBackgroundService>();
+
+// Register HttpClient for Use Case
+builder.Services.AddHttpClient();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -98,5 +112,13 @@ if (app.Environment.IsDevelopment())
 app.UseAuthorization();
 app.MapControllers();
 app.MapGet("/", () => "Audio Processor API is running!");
+
+// Automatically apply pending EF Core migrations in Development
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await context.Database.MigrateAsync();
+}
 
 app.Run();

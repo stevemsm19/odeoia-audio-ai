@@ -29,6 +29,15 @@ namespace AudioProcessor.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("CompressedStorageUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("compressed_storage_url");
+
+                    b.Property<long?>("CompressionDurationMs")
+                        .HasColumnType("bigint")
+                        .HasColumnName("compression_duration_ms");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("created_at");
@@ -38,6 +47,12 @@ namespace AudioProcessor.Infrastructure.Migrations
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)")
                         .HasColumnName("file_name");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("status");
 
                     b.Property<string>("StorageUrl")
                         .IsRequired()

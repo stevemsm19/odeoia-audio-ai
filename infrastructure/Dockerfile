@@ -1,9 +1,9 @@
 # Stage 1: Build
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /app
 
 # Copy solution and all project files for dependency resolution
-COPY backend/AudioProcessor.slnx ./backend/
+COPY backend/AudioProcessor.sln ./backend/
 COPY backend/src/AudioProcessor.Domain/AudioProcessor.Domain.csproj ./backend/src/AudioProcessor.Domain/
 COPY backend/src/AudioProcessor.Application/AudioProcessor.Application.csproj ./backend/src/AudioProcessor.Application/
 COPY backend/src/AudioProcessor.Infrastructure/AudioProcessor.Infrastructure.csproj ./backend/src/AudioProcessor.Infrastructure/
@@ -11,7 +11,7 @@ COPY backend/src/AudioProcessor.Api/AudioProcessor.Api.csproj ./backend/src/Audi
 COPY backend/tests/AudioProcessor.Tests/AudioProcessor.Tests.csproj ./backend/tests/AudioProcessor.Tests/
 
 # Restore dependencies (separate layer for caching)
-RUN dotnet restore backend/AudioProcessor.slnx
+RUN dotnet restore backend/AudioProcessor.sln
 
 # Copy remaining source code
 COPY backend/ ./backend/
@@ -22,8 +22,13 @@ RUN dotnet publish backend/src/AudioProcessor.Api/AudioProcessor.Api.csproj \
     -o /app/publish
 
 # Stage 2: Runtime
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
+
+# Install FFmpeg
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/publish .
 

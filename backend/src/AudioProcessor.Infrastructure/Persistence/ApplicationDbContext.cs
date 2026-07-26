@@ -3,6 +3,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AudioProcessor.Infrastructure.Persistence
 {
+    /// <summary>
+    /// Represents the Entity Framework Core database context.
+    /// Responsible for configuring entity mappings, table names, and defining the data schema for the domain model.
+    /// </summary>
     public class ApplicationDbContext : DbContext
     {
         public DbSet<AudioRecord> AudioRecords { get; set; } = null!;
@@ -41,6 +45,22 @@ namespace AudioProcessor.Infrastructure.Persistence
                     .HasColumnName("created_at")
                     .HasColumnType("timestamptz")
                     .IsRequired();
+
+                entity.Property(e => e.CompressedStorageUrl)
+                    .HasColumnName("compressed_storage_url")
+                    .HasMaxLength(2048)
+                    .IsRequired(false);
+
+                entity.Property(e => e.Status)
+                    .HasColumnName("status")
+                    .HasConversion<string>()
+                    .HasMaxLength(50)
+                    .IsRequired();
+
+                entity.Property(e => e.CompressionDurationMs)
+                    .HasColumnName("compression_duration_ms")
+                    .HasColumnType("bigint")
+                    .IsRequired(false);
             });
         }
     }

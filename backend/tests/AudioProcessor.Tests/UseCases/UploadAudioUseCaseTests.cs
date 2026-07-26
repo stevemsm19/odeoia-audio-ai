@@ -34,7 +34,7 @@ namespace AudioProcessor.Tests.UseCases
             using var fakeStream = new MemoryStream(new byte[] { 1, 2, 3, 4, 5 });
 
             _mockStorageService
-                .Setup(s => s.UploadAudioAsync(It.IsAny<Stream>(), fileName, contentType, It.IsAny<CancellationToken>()))
+                .Setup(s => s.UploadAudioAsync(It.IsAny<Stream>(), fileName, contentType, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(expectedUrl);
 
             _mockAudioRepository
@@ -84,7 +84,7 @@ namespace AudioProcessor.Tests.UseCases
             using var fakeStream = new MemoryStream(new byte[] { 10, 20, 30 });
 
             _mockStorageService
-                .Setup(s => s.UploadAudioAsync(It.IsAny<Stream>(), fileName, contentType, It.IsAny<CancellationToken>()))
+                .Setup(s => s.UploadAudioAsync(It.IsAny<Stream>(), fileName, contentType, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(returnedUrl);
 
             _mockAudioRepository
@@ -96,7 +96,7 @@ namespace AudioProcessor.Tests.UseCases
 
             // Assert
             _mockStorageService.Verify(
-                s => s.UploadAudioAsync(It.IsAny<Stream>(), fileName, contentType, It.IsAny<CancellationToken>()),
+                s => s.UploadAudioAsync(It.IsAny<Stream>(), fileName, contentType, It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
                 Times.Once
             );
 

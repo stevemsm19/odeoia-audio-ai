@@ -5,26 +5,58 @@ using System.Threading.Tasks;
 using AudioProcessor.Application.Interfaces;
 using AppSupabaseOptions = AudioProcessor.Infrastructure.ExternalServices.SupabaseOptions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 using Supabase;
 
 namespace AudioProcessor.Infrastructure.Storage
 {
+    /// <summary>
+    /// Implements external object storage interactions by acting as an adapter for the Supabase Storage API.
+    /// Manages byte streams, object paths, bucket authorization, and public URL generation.
+    /// </summary>
     public class SupabaseStorageService : IAudioStorageService
     {
         private readonly Client _supabaseClient;
         private readonly string _bucketName;
+        private readonly ILogger<SupabaseStorageService> _logger;
 
-        public SupabaseStorageService(Client supabaseClient, IOptions<AppSupabaseOptions> options)
+        public SupabaseStorageService(
+            Client supabaseClient,
+            IOptions<AppSupabaseOptions> options,
+            ILogger<SupabaseStorageService> logger)
         {
-            _supabaseClient = supabaseClient;
-            _bucketName = options.Value.BucketName;
+            _supabaseClient = supabaseClient ?? throw new ArgumentNullException(nameof(supabaseClient));
+            _bucketName = options?.Value?.BucketName ?? throw new ArgumentException("BucketName option is required.");
+            _logger = logger;
         }
 
-        public async Task<string> UploadAudioAsync(Stream fileStream, string fileName, string contentType, CancellationToken cancellationToken = default)
+        /// <inheritdoc />
+        public async Task<string> UploadAudioAsync(Stream fileStream, string fileName, string contentType, Guid folderId, CancellationToken cancellationToken = default)
         {
+            if (fileStream == null)
+                throw new ArgumentNullException(nameof(fileStream));
+
+            if (string.IsNullOrWhiteSpace(fileName))
+                throw new ArgumentException("File name cannot be empty.", nameof(fileName));
+
+            string extension = Path.GetExtension(fileName).ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(contentType) || contentType == "application/octet-stream")
+            {
+                contentType = extension switch
+                {
+                    ".aac" => "audio/aac",
+                    ".mp3" => "audio/mpeg",
+                    ".wav" => "audio/wav",
+                    _ => contentType ?? "application/octet-stream"
+                };
+            }
+
+            _logger.LogInformation("Uploading file {FileName} with Content-Type {ContentType} (Extension: {Extension}) to Supabase bucket {Bucket}",
+                fileName, contentType, extension, _bucketName);
+
             byte[] fileBytes = await ReadStreamToBytesAsync(fileStream, cancellationToken);
 
-            string uniqueObjectPath = $"{Guid.NewGuid()}/{fileName}";
+            string uniqueObjectPath = $"{folderId}/{fileName}";
 
             await _supabaseClient.Storage
                 .From(_bucketName)
@@ -37,6 +69,9 @@ namespace AudioProcessor.Infrastructure.Storage
             string publicUrl = _supabaseClient.Storage
                 .From(_bucketName)
                 .GetPublicUrl(uniqueObjectPath);
+
+            _logger.LogInformation("Successfully uploaded {FileName} to path {Path}. Public URL: {Url}",
+                fileName, uniqueObjectPath, publicUrl);
 
             return publicUrl;
         }
