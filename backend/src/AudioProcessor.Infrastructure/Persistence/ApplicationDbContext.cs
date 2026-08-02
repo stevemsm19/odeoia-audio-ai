@@ -61,6 +61,27 @@ namespace AudioProcessor.Infrastructure.Persistence
                     .HasColumnName("compression_duration_ms")
                     .HasColumnType("bigint")
                     .IsRequired(false);
+
+                entity.Property(e => e.Summary)
+                    .HasColumnName("summary")
+                    .HasMaxLength(500)
+                    .IsRequired(false);
+
+                entity.Property(e => e.SummaryStatus)
+                    .HasColumnName("summary_status")
+                    .HasConversion<string>()
+                    .HasMaxLength(50)
+                    .IsRequired();
+
+                entity.Property(e => e.SummaryDurationMs)
+                    .HasColumnName("summary_duration_ms")
+                    .HasColumnType("bigint")
+                    .IsRequired(false);
+
+                entity.Property(e => e.SummaryError)
+                    .HasColumnName("summary_error")
+                    .HasMaxLength(1000)
+                    .IsRequired(false);
             });
         }
     }

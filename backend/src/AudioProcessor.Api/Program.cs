@@ -7,6 +7,8 @@ using AudioProcessor.Infrastructure.Persistence.Repositories;
 using AudioProcessor.Infrastructure.Storage;
 using AudioProcessor.Infrastructure.Queue;
 using AudioProcessor.Infrastructure.Services;
+using AudioProcessor.Infrastructure.ExternalServices;
+using Microsoft.Extensions.Options;
 using AudioProcessor.Api.BackgroundServices;
 using AppSupabaseOptions = AudioProcessor.Infrastructure.ExternalServices.SupabaseOptions;
 using DotNetEnv;
@@ -77,8 +79,11 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddScoped<IAudioRepository, AudioRepository>();
 builder.Services.AddScoped<IAudioStorageService, SupabaseStorageService>();
 builder.Services.AddScoped<IAudioCompressionService, FFmpegAudioCompressionService>();
+builder.Services.Configure<LocalModelWorkerOptions>(builder.Configuration.GetSection(LocalModelWorkerOptions.SectionName));
+builder.Services.AddSingleton<IAudioSummaryService, LocalWhisperCppSummaryService>();
 builder.Services.AddScoped<UploadAudioUseCase>();
 builder.Services.AddScoped<ProcessAudioCompressionCommandHandler>();
+builder.Services.AddScoped<ProcessAudioSummaryCommandHandler>();
 
 // Register Singleton Background Queue
 builder.Services.AddSingleton<IBackgroundJobQueue, ChannelBackgroundJobQueue>();

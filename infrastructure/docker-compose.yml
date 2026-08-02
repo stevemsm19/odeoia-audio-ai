@@ -10,3 +10,5 @@ services:
       - .env
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
+    volumes:
+      - ../models:/models:ro

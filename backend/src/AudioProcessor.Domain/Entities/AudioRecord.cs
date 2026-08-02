@@ -1,5 +1,6 @@
 using System;
 using AudioProcessor.Domain.Enums;
+using System.Globalization;
 
 namespace AudioProcessor.Domain.Entities
 {
@@ -12,6 +13,10 @@ namespace AudioProcessor.Domain.Entities
         public string? CompressedStorageUrl { get; private set; }
         public AudioProcessingStatus Status { get; private set; }
         public long? CompressionDurationMs { get; private set; }
+        public string? Summary { get; private set; }
+        public AudioSummaryStatus SummaryStatus { get; private set; }
+        public long? SummaryDurationMs { get; private set; }
+        public string? SummaryError { get; private set; }
 
         private AudioRecord()
         {
@@ -37,6 +42,10 @@ namespace AudioProcessor.Domain.Entities
             Status = AudioProcessingStatus.Pending;
             CompressedStorageUrl = null;
             CompressionDurationMs = null;
+            Summary = null;
+            SummaryStatus = AudioSummaryStatus.Pending;
+            SummaryDurationMs = null;
+            SummaryError = null;
         }
 
         public void MarkAsProcessing()
@@ -64,6 +73,55 @@ namespace AudioProcessor.Domain.Entities
 
             CompressionDurationMs = compressionDurationMs;
             Status = AudioProcessingStatus.Failed;
+        }
+
+        public void MarkSummaryAsProcessing()
+        {
+            if (SummaryStatus == AudioSummaryStatus.Completed)
+                return;
+
+            SummaryStatus = AudioSummaryStatus.Processing;
+            SummaryError = null;
+        }
+
+        public void MarkSummaryAsCompleted(string summary, long durationMs)
+        {
+            if (durationMs < 0)
+                throw new ArgumentOutOfRangeException(nameof(durationMs));
+
+            Summary = LimitSummaryLength(summary);
+            SummaryDurationMs = durationMs;
+            SummaryError = null;
+            SummaryStatus = AudioSummaryStatus.Completed;
+        }
+
+        public void MarkSummaryAsFailed(string error, long durationMs)
+        {
+            if (durationMs < 0)
+                throw new ArgumentOutOfRangeException(nameof(durationMs));
+
+            SummaryDurationMs = durationMs;
+            SummaryError = string.IsNullOrWhiteSpace(error) ? "Summary generation failed." : error[..Math.Min(error.Length, 1000)];
+            SummaryStatus = AudioSummaryStatus.Failed;
+        }
+
+        private static string LimitSummaryLength(string summary)
+        {
+            string normalized = string.Join(" ", (summary ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+            if (string.IsNullOrWhiteSpace(normalized))
+                return "No speech detected";
+
+            int[] elements = StringInfo.ParseCombiningCharacters(normalized);
+            if (elements.Length <= 500)
+                return normalized;
+
+            int take = 499;
+            string candidate = normalized[..elements[take]].TrimEnd();
+            int wordBoundary = candidate.LastIndexOf(' ');
+            if (wordBoundary > 15)
+                candidate = candidate[..wordBoundary];
+
+            return candidate + "…";
         }
     }
 }

@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AudioProcessor.Application.Interfaces;
 using AudioProcessor.Application.UseCases;
+using AudioProcessor.Application.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -36,33 +37,55 @@ namespace AudioProcessor.Api.BackgroundServices
         {
             _logger.LogInformation("Audio Processing Background Service is starting.");
 
+            int workerCount = Math.Max(2, Math.Min(Environment.ProcessorCount, 4));
+            Task[] workers = new Task[workerCount];
+            for (int i = 0; i < workerCount; i++)
+            {
+                workers[i] = ConsumeAsync(i + 1, stoppingToken);
+            }
+            await Task.WhenAll(workers);
+            _logger.LogInformation("Audio Processing Background Service has stopped.");
+        }
+
+        private async Task ConsumeAsync(int workerNumber, CancellationToken stoppingToken)
+        {
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
-                    Guid audioRecordId = await _queue.DequeueJobAsync(stoppingToken);
+                    AudioProcessingJob job = await _queue.DequeueJobAsync(stoppingToken);
 
-                    _logger.LogInformation("Dequeued audio compression job for Record ID: {Id}", audioRecordId);
+                    AudioPerformanceLog.Write(_logger, job.AudioRecordId, job.Type, job.CorrelationId, "QueueWait", "Completed", Math.Max(0, (long)(DateTimeOffset.UtcNow - job.EnqueuedAtUtc).TotalMilliseconds));
+
+                    _logger.LogInformation("Worker {Worker} dequeued {JobType} job for record {Id}", workerNumber, job.Type, job.AudioRecordId);
                     using (var scope = _serviceProvider.CreateScope())
                     {
-                        var handler = scope.ServiceProvider.GetRequiredService<ProcessAudioCompressionCommandHandler>();
-
                         var stopwatch = Stopwatch.StartNew();
-                        _logger.LogInformation("Initiating background transcoder workflow for Record ID: {Id}", audioRecordId);
 
                         try
                         {
-                            await handler.HandleAsync(audioRecordId, stoppingToken);
+                            if (job.Type == AudioProcessingJobType.Compression)
+                            {
+                                var handler = scope.ServiceProvider.GetRequiredService<ProcessAudioCompressionCommandHandler>();
+                                await handler.HandleAsync(job.AudioRecordId, job.CorrelationId, stoppingToken);
+                            }
+                            else
+                            {
+                                var handler = scope.ServiceProvider.GetRequiredService<ProcessAudioSummaryCommandHandler>();
+                                await handler.HandleAsync(job.AudioRecordId, job.CorrelationId, stoppingToken);
+                            }
 
                             stopwatch.Stop();
-                            _logger.LogInformation("Background compression workflow completed successfully for Record ID: {Id}. Duration: {DurationMs} ms",
-                                audioRecordId, stopwatch.ElapsedMilliseconds);
+                            _logger.LogInformation("Background {JobType} workflow completed for record {Id}. Duration: {DurationMs} ms",
+                                job.Type, job.AudioRecordId, stopwatch.ElapsedMilliseconds);
+                            AudioPerformanceLog.Write(_logger, job.AudioRecordId, job.Type, job.CorrelationId, "EndToEnd", "Completed", stopwatch.ElapsedMilliseconds);
                         }
                         catch (Exception ex)
                         {
                             stopwatch.Stop();
-                            _logger.LogError(ex, "Background compression workflow failed for Record ID: {Id}. Terminated after: {DurationMs} ms",
-                                audioRecordId, stopwatch.ElapsedMilliseconds);
+                            _logger.LogError(ex, "Background {JobType} workflow failed for record {Id}. Terminated after: {DurationMs} ms",
+                                job.Type, job.AudioRecordId, stopwatch.ElapsedMilliseconds);
+                            AudioPerformanceLog.Write(_logger, job.AudioRecordId, job.Type, job.CorrelationId, "EndToEnd", "Failed", stopwatch.ElapsedMilliseconds);
                         }
                     }
                 }
@@ -77,7 +100,6 @@ namespace AudioProcessor.Api.BackgroundServices
                 }
             }
 
-            _logger.LogInformation("Audio Processing Background Service has stopped.");
         }
     }
 }

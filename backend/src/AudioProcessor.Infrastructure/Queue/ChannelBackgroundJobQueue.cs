@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using AudioProcessor.Application.Interfaces;
+using AudioProcessor.Application.Models;
 
 namespace AudioProcessor.Infrastructure.Queue
 {
@@ -12,31 +13,31 @@ namespace AudioProcessor.Infrastructure.Queue
     /// </summary>
     public class ChannelBackgroundJobQueue : IBackgroundJobQueue
     {
-        private readonly Channel<Guid> _channel;
+        private readonly Channel<AudioProcessingJob> _channel;
 
         public ChannelBackgroundJobQueue()
         {
             var options = new BoundedChannelOptions(100)
             {
                 FullMode = BoundedChannelFullMode.Wait,
-                SingleReader = true,
+                SingleReader = false,
                 SingleWriter = false
             };
 
-            _channel = Channel.CreateBounded<Guid>(options);
+            _channel = Channel.CreateBounded<AudioProcessingJob>(options);
         }
 
         /// <inheritdoc />
-        public async ValueTask EnqueueJobAsync(Guid audioRecordId, CancellationToken cancellationToken = default)
+        public async ValueTask EnqueueJobAsync(AudioProcessingJob job, CancellationToken cancellationToken = default)
         {
-            if (audioRecordId == Guid.Empty)
-                throw new ArgumentException("Audio record ID cannot be empty.", nameof(audioRecordId));
+            if (job is null || job.AudioRecordId == Guid.Empty)
+                throw new ArgumentException("Audio processing job must contain a record ID.", nameof(job));
 
-            await _channel.Writer.WriteAsync(audioRecordId, cancellationToken);
+            await _channel.Writer.WriteAsync(job, cancellationToken);
         }
 
         /// <inheritdoc />
-        public async ValueTask<Guid> DequeueJobAsync(CancellationToken cancellationToken = default)
+        public async ValueTask<AudioProcessingJob> DequeueJobAsync(CancellationToken cancellationToken = default)
         {
             return await _channel.Reader.ReadAsync(cancellationToken);
         }

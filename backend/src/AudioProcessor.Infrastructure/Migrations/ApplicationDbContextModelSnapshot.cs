@@ -60,6 +60,26 @@ namespace AudioProcessor.Infrastructure.Migrations
                         .HasColumnType("character varying(2048)")
                         .HasColumnName("storage_url");
 
+                    b.Property<string>("Summary")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("summary");
+
+                    b.Property<long?>("SummaryDurationMs")
+                        .HasColumnType("bigint")
+                        .HasColumnName("summary_duration_ms");
+
+                    b.Property<string>("SummaryError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("summary_error");
+
+                    b.Property<string>("SummaryStatus")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("summary_status");
+
                     b.HasKey("Id");
 
                     b.ToTable("audio_records", (string)null);
