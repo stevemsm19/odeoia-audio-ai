@@ -142,6 +142,7 @@ If you are using macOS, Linux, or WSL, you can use the `Makefile` for standalone
 | Method | Endpoint            | Description                           |
 | ------ | ------------------- | ------------------------------------- |
 | POST   | `/api/audio/upload` | Upload an `.mp3` or `.wav` audio file |
+| GET    | `/api/audio/{id}` | Retrieve compression and summary status |
 
 **Example request (using Docker port):**
 ```bash
@@ -181,3 +182,37 @@ Api
 Tests
  └── Focused unit tests for domain and application layers
 ```
+
+## Local Audio Summary Models
+
+Each upload queues both compression and a local summary job. The summary path
+normalizes audio with FFmpeg, transcribes it with CPU-quantized `whisper.cpp`
+using the tiny English model, and sends the transcript to a local GGUF
+instruction model through `llama.cpp`. It does not use Ollama or an external AI
+API. The summary is validated and stored at no more than 50 characters.
+
+`make init` and `make init-docker` automatically run
+`scripts/download-models.sh`. It creates the ignored `models/` directory and
+downloads only missing files directly from the publisher-maintained Whisper.cpp
+and Qwen model repositories. No manual copying is required.
+
+```text
+models/ggml-tiny.en-q5_1.bin
+models/qwen2.5-0.5b-instruct-q5_k_m.gguf
+```
+
+`Qwen2.5-0.5B-Instruct` is below the 1.5B-parameter cap. The application uses
+one simultaneous model job by default (`LocalModelWorker:MaxConcurrentJobs=1`)
+to control CPU and memory consumption. Increase it only after benchmarking the
+target hardware. Model paths, executable paths, and timeout are configurable in
+`backend/src/AudioProcessor.Api/appsettings.json`.
+
+## Performance Baseline Logs
+
+Every queued compression and summary job emits structured `AudioPerformance`
+logs with `TimestampUtc`, `AudioId`, `JobType`, `CorrelationId`, `Stage`,
+`Status`, and `ElapsedMilliseconds`. The baseline stages include queue wait,
+database updates, audio download, compression, compressed-audio upload, AI
+request latency, speech-to-text, summarization, and end-to-end processing.
+Filter by `AudioId` or `CorrelationId` to reconstruct one pipeline execution,
+then aggregate `ElapsedMilliseconds` by `Stage` to compare later optimizations.

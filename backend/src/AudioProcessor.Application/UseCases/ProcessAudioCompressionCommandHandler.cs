@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using AudioProcessor.Application.Interfaces;
 using AudioProcessor.Domain.Entities;
 using AudioProcessor.Domain.Enums;
+using AudioProcessor.Application.Models;
 using Microsoft.Extensions.Logging;
 
 //TODO: Divide in command handler and command
@@ -46,8 +47,9 @@ namespace AudioProcessor.Application.UseCases
         /// <param name="audioRecordId">The unique identifier of the audio record to process.</param>
         /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
         /// <exception cref="Exception">Propagates any encountered transient or processing errors to ensure the queue consumer can handle them.</exception>
-        public async Task HandleAsync(Guid audioRecordId, CancellationToken cancellationToken = default)
+        public async Task HandleAsync(Guid audioRecordId, string correlationId = "none", CancellationToken cancellationToken = default)
         {
+            var total = Stopwatch.StartNew();
             _logger.LogInformation("Processing audio compression request for Record ID: {Id}", audioRecordId);
 
             var record = await _audioRepository.GetByIdAsync(audioRecordId, cancellationToken);
@@ -65,7 +67,9 @@ namespace AudioProcessor.Application.UseCases
 
             var stopwatch = Stopwatch.StartNew();
             record.MarkAsProcessing();
+            var databaseUpdate = Stopwatch.StartNew();
             await _audioRepository.UpdateAudioRecordAsync(record, cancellationToken);
+            AudioPerformanceLog.Write(_logger, audioRecordId, AudioProcessingJobType.Compression, correlationId, "DatabaseUpdate", "Completed", databaseUpdate.ElapsedMilliseconds);
 
             Stream? originalStream = null;
             Stream? compressedStream = null;
@@ -74,30 +78,39 @@ namespace AudioProcessor.Application.UseCases
             {
                 _logger.LogInformation("Streaming original audio file from: {Url}", record.StorageUrl);
 
+                var download = Stopwatch.StartNew();
                 var response = await _httpClient.GetAsync(record.StorageUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
                 response.EnsureSuccessStatusCode();
 
                 originalStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                AudioPerformanceLog.Write(_logger, audioRecordId, AudioProcessingJobType.Compression, correlationId, "AudioDownload", "Completed", download.ElapsedMilliseconds);
                 _logger.LogInformation("Invoking audio compression service for {FileName}", record.FileName);
+                var compression = Stopwatch.StartNew();
                 compressedStream = await _audioCompressionService.CompressToAacAsync(originalStream, record.FileName, cancellationToken);
+                AudioPerformanceLog.Write(_logger, audioRecordId, AudioProcessingJobType.Compression, correlationId, "Compression", "Completed", compression.ElapsedMilliseconds);
 
                 string compressedFileName = Path.ChangeExtension(record.FileName, ".aac");
                 _logger.LogInformation("Uploading compressed audio to storage as {FileName}", compressedFileName);
 
+                var upload = Stopwatch.StartNew();
                 string compressedStorageUrl = await _audioStorageService.UploadAudioAsync(
                     compressedStream,
                     compressedFileName,
                     "audio/aac",
                     record.Id,
                     cancellationToken);
+                AudioPerformanceLog.Write(_logger, audioRecordId, AudioProcessingJobType.Compression, correlationId, "CompressedAudioUpload", "Completed", upload.ElapsedMilliseconds);
 
                 stopwatch.Stop();
 
                 record.MarkAsCompleted(compressedStorageUrl, stopwatch.ElapsedMilliseconds);
+                databaseUpdate.Restart();
                 await _audioRepository.UpdateAudioRecordAsync(record, cancellationToken);
+                AudioPerformanceLog.Write(_logger, audioRecordId, AudioProcessingJobType.Compression, correlationId, "DatabaseUpdate", "Completed", databaseUpdate.ElapsedMilliseconds);
 
                 _logger.LogInformation("Audio compression completed successfully for Record ID {Id} in {Duration} ms. URL: {Url}",
                     audioRecordId, stopwatch.ElapsedMilliseconds, compressedStorageUrl);
+                AudioPerformanceLog.Write(_logger, audioRecordId, AudioProcessingJobType.Compression, correlationId, "EndToEnd", "Completed", total.ElapsedMilliseconds);
             }
             catch (Exception ex)
             {
@@ -107,13 +120,16 @@ namespace AudioProcessor.Application.UseCases
                 try
                 {
                     record.MarkAsFailed(stopwatch.ElapsedMilliseconds);
+                    databaseUpdate.Restart();
                     await _audioRepository.UpdateAudioRecordAsync(record, cancellationToken);
+                    AudioPerformanceLog.Write(_logger, audioRecordId, AudioProcessingJobType.Compression, correlationId, "DatabaseUpdate", "Completed", databaseUpdate.ElapsedMilliseconds);
                 }
                 catch (Exception dbEx)
                 {
                     _logger.LogError(dbEx, "Failed to mark record {Id} as Failed in the database.", audioRecordId);
                 }
 
+                AudioPerformanceLog.Write(_logger, audioRecordId, AudioProcessingJobType.Compression, correlationId, "EndToEnd", "Failed", total.ElapsedMilliseconds);
                 throw;
             }
             finally

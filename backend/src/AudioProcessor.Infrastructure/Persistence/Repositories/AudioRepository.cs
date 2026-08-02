@@ -35,7 +35,9 @@ namespace AudioProcessor.Infrastructure.Persistence.Repositories
         /// <inheritdoc />
         public async Task UpdateAudioRecordAsync(AudioRecord audioRecord, CancellationToken cancellationToken = default)
         {
-            _dbContext.AudioRecords.Update(audioRecord);
+            // Records returned by this repository are tracked in the scoped DbContext.
+            // Saving detected changes prevents a summary worker from overwriting fields
+            // updated concurrently by a compression worker with stale values.
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
     }

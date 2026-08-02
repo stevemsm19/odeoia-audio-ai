@@ -11,7 +11,7 @@ GREEN := \033[32m
 RED := \033[31m
 NC := \033[0m
 
-.PHONY: help init init-docker setup-hooks format lint build run migration db-update test reset-all docker-build docker-up docker-down
+.PHONY: help init init-docker setup-hooks download-models format lint build run migration db-update test reset-all docker-build docker-up docker-down
 
 help: ## Show available commands
 	@echo ""
@@ -19,9 +19,12 @@ help: ## Show available commands
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "$(CYAN)%-25s$(NC) %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo ""
 
-init: setup-hooks run ## Initialize Local Development (Setup hooks and run API)
+init: setup-hooks download-models run ## Initialize Local Development (Setup hooks, models, and run API)
 
-init-docker: setup-hooks docker-up ## Initialize Containerized Development (Setup hooks and run Docker)
+init-docker: setup-hooks download-models docker-up ## Initialize Containerized Development (Setup hooks, models, and run Docker)
+
+download-models: ## Provision missing local Whisper and GGUF models
+	./scripts/download-models.sh
 
 validate: lint build test ## Validate code quality
 

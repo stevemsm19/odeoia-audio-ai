@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AudioProcessor.Application.Interfaces;
 using AudioProcessor.Application.UseCases;
+using AudioProcessor.Application.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -21,14 +22,16 @@ namespace AudioProcessor.Api.Controllers
     {
         private readonly UploadAudioUseCase _uploadAudioUseCase;
         private readonly IBackgroundJobQueue _backgroundJobQueue;
+        private readonly IAudioRepository _audioRepository;
 
         private static readonly string[] AllowedExtensions = { ".mp3", ".wav" };
         private static readonly string[] AllowedContentTypes = { "audio/mpeg", "audio/wav", "audio/wave", "audio/x-wav" };
 
-        public AudioController(UploadAudioUseCase uploadAudioUseCase, IBackgroundJobQueue backgroundJobQueue)
+        public AudioController(UploadAudioUseCase uploadAudioUseCase, IBackgroundJobQueue backgroundJobQueue, IAudioRepository audioRepository)
         {
             _uploadAudioUseCase = uploadAudioUseCase ?? throw new ArgumentNullException(nameof(uploadAudioUseCase));
             _backgroundJobQueue = backgroundJobQueue ?? throw new ArgumentNullException(nameof(backgroundJobQueue));
+            _audioRepository = audioRepository ?? throw new ArgumentNullException(nameof(audioRepository));
         }
 
         /// <summary>
@@ -60,7 +63,10 @@ namespace AudioProcessor.Api.Controllers
             );
 
             // 2. Enqueue the Guid of the audio record into the background worker channel queue
-            await _backgroundJobQueue.EnqueueJobAsync(audioRecord.Id, cancellationToken);
+            string correlationId = HttpContext.TraceIdentifier;
+            DateTimeOffset enqueuedAtUtc = DateTimeOffset.UtcNow;
+            await _backgroundJobQueue.EnqueueJobAsync(new AudioProcessingJob(audioRecord.Id, AudioProcessingJobType.Compression, correlationId, enqueuedAtUtc), cancellationToken);
+            await _backgroundJobQueue.EnqueueJobAsync(new AudioProcessingJob(audioRecord.Id, AudioProcessingJobType.Summary, correlationId, enqueuedAtUtc), cancellationToken);
 
             var response = new AudioUploadResponse(
                 audioRecord.Id,
@@ -72,7 +78,27 @@ namespace AudioProcessor.Api.Controllers
             // 3. Return HTTP 202 Accepted to signal that processing has been queued
             return Accepted(response);
         }
+
+        [HttpGet("{id:guid}")]
+        [ProducesResponseType(typeof(AudioProcessingStatusResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetAudioStatus(Guid id, CancellationToken cancellationToken)
+        {
+            var record = await _audioRepository.GetByIdAsync(id, cancellationToken);
+            if (record is null)
+                return NotFound();
+
+            return Ok(new AudioProcessingStatusResponse(
+                record.Id,
+                record.FileName,
+                record.Status.ToString(),
+                record.CompressedStorageUrl,
+                record.SummaryStatus.ToString(),
+                record.Summary,
+                record.SummaryError));
+        }
     }
 
     public record AudioUploadResponse(Guid Id, string FileName, string StorageUrl, string Status, DateTime CreatedAt);
+    public record AudioProcessingStatusResponse(Guid Id, string FileName, string CompressionStatus, string? CompressedStorageUrl, string SummaryStatus, string? Summary, string? SummaryError);
 }
