@@ -1,0 +1,45 @@
+.progress-card {
+  margin-top: 25px;
+}
+.progress-heading {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  margin-bottom: 11px;
+}
+.progress-heading span {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.pulse {
+  width: 7px;
+  height: 7px;
+  background: var(--primary);
+  border-radius: 50%;
+  animation: pulse 1.3s infinite;
+}
+.progress-track {
+  height: 9px;
+  border-radius: 10px;
+  background: #e7e7e8;
+  overflow: hidden;
+}
+.progress-track span {
+  height: 100%;
+  display: block;
+  background: var(--primary);
+  border-radius: 10px;
+  width: 35%;
+  animation: processing 1.25s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    transform: scale(1.5);
+    opacity: 0.45;
+  }
+}
+@keyframes processing {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}

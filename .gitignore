@@ -1,5 +1,6 @@
 # Secrets and environment files
 infrastructure/.env
+frontend/.env
 backend/src/AudioProcessor.Api/appsettings.Development.json
 
 # .NET build artifacts
@@ -29,6 +30,8 @@ Thumbs.db
 
 # Project
 audios/
-/models/
+models/
 LAB-TEMPLATE.md
 excercises/
+frontend/node_modules
+frontend/dist

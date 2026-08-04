@@ -1,218 +1,247 @@
-# Audio Processor API
+# OdeoIA
 
-This interactive API is designed to process, compress, filter, and summarize voice audio files efficiently using Clean Architecture.
+OdeoIA is a full-stack audio-processing application. The .NET 8 API follows Clean Architecture and performs asynchronous audio compression and AI-powered summarization in a background worker. The React/Vite frontend uploads audio, polls the real job status, and plays the processed AAC file alongside the generated summary when it is ready.
 
-## Project Structure
+## Repository Structure
 
 ```text
-/backend            → C# .NET 8 Web API (Clean Architecture)
-/frontend           → TypeScript client (future)
-/infrastructure     → Docker, .env, and this README
-Makefile            → Developer automation commands
+backend/         .NET 8 API — Clean Architecture, use cases, xUnit tests
+frontend/        React + Vite client
+infrastructure/  Docker Compose, API Dockerfile, Nginx proxy configuration
+workers/         Python worker script for local Whisper + LLM summarization
+scripts/         Git hooks and model download automation
+models/          Local AI models (Whisper + GGUF) — provisioned by init-docker
 ```
+
+---
 
 ## Prerequisites
 
-| Tool           | Version  | Description                         |
-| -------------- | -------- | ----------------------------------- |
-| .NET SDK       | 8.0      | Backend development                 |
-| FFmpeg         | Any      | Required for local audio compression|
-| Docker         | 24+      | Container execution                 |
-| Docker Compose | v2.x     | Docker orchestration                |
-| make           | Any      | Developer automation commands       |
-| WSL            | Optional | Recommended for Windows development |
+| Tool           | Version  | Notes                                                      |
+| -------------- | -------- | ---------------------------------------------------------- |
+| .NET SDK       | 8.0      | Required for local (bare-metal) development only           |
+| Node.js + npm  | 24+      | Required for local frontend development only               |
+| FFmpeg         | Any      | Required for local audio compression                       |
+| Docker Desktop | 24+      | Required for containerized development                     |
+| Docker Compose | v2.x     | Bundled with Docker Desktop                                |
+| `make`         | Any      | Required to run all automation commands (see note below)   |
+
+> [!IMPORTANT]
+> **Windows users:** `make` is not available natively on Windows. Install it through **WSL 2** (Windows Subsystem for Linux) or Git Bash. WSL 2 is the recommended approach as it provides a full Linux environment compatible with all project commands.
+>
+> Install WSL: `wsl --install` in PowerShell (Administrator), then use the Ubuntu terminal for all `make` commands.
 
 ---
 
-# Quick Start Guide
+## Quick Start
 
-> [!WARNING]  
-> **MANDATORY PREREQUISITE:** Before executing any setup commands or running the application, you **must** configure your environment variables. The API will fail to start if the database and Supabase credentials are not provided.
+> [!WARNING]
+> **Configure your environment variables first.** The API will fail to start without the database and Supabase credentials. Complete **Step 1** before running any other command.
 
-### Step 1: Configure Environment Variables
+### Step 1 — Configure Environment Variables
 
-All secrets and connection strings are managed through the `.env` file. You need to create this file by copying the provided example.
+Copy the provided templates and fill in your credentials. **Do not commit either file.**
 
-**For macOS / Linux / Windows WSL:**
+**macOS / Linux / WSL:**
 ```bash
 cp infrastructure/.env.example infrastructure/.env
+cp frontend/.env.example frontend/.env
 ```
 
-**For Windows PowerShell:**
+**Windows PowerShell:**
 ```powershell
 Copy-Item infrastructure\.env.example infrastructure\.env
+Copy-Item frontend\.env.example frontend\.env
 ```
 
-Open `/infrastructure/.env` and fill in your Supabase and PostgreSQL credentials:
+Open `infrastructure/.env` and provide your Supabase and PostgreSQL credentials:
+
 ```env
 BUCKET=audio-files
-DB_CONNECTION_STRING=
-SUPABASE_URL=
-SUPABASE_KEY=
+DB_CONNECTION_STRING=Host=...;Database=...;Username=...;Password=...
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-service-role-key
+FRONTEND_ORIGIN=http://localhost:5173
 ```
+
+The frontend uses these non-secret Vite values (already set in `frontend/.env.example`):
+
+| Variable             | Default                   | Purpose                          |
+| -------------------- | ------------------------- | -------------------------------- |
+| `VITE_API_BASE_URL`  | `/api`                    | Browser-facing API path          |
+| `VITE_DEV_API_TARGET`| `http://localhost:5196`   | Local Vite proxy target          |
 
 ---
 
-### Step 2: Initialize and Run the Application
+### Step 2 — Initialize and Run
 
-Database migrations are handled automatically on startup during local development, so you only need to run a single command to get everything working. Choose **Option A** or **Option B** depending on your preferred workflow.
+Choose the workflow that matches your environment.
 
-#### Option A: Local Development (Bare Metal / WSL)
-*Recommended for active coding and debugging.*
+#### Option A: Docker (Recommended for first-time setup)
 
-**macOS / Linux / Windows WSL:**
-```bash
-make init
-```
+Runs the full stack in containers. No .NET SDK or FFmpeg installation required.
 
-**Windows PowerShell (Manual Equivalent):**
-```powershell
-dotnet run --project backend\src\AudioProcessor.Api
-```
-
-#### Option B: Containerized Development (Docker)
-*Recommended for testing isolated environments without installing the .NET SDK.*
-
-**macOS / Linux / Windows WSL:**
+**macOS / Linux / WSL:**
 ```bash
 make init-docker
 ```
 
-**Windows PowerShell (Manual Equivalent):**
+This single command:
+1. Installs the Git pre-push hook
+2. Downloads the required local AI models (Whisper + GGUF) into `models/`
+3. Builds and starts all Docker containers
+
+**Windows PowerShell (manual equivalent):**
 ```powershell
 cd infrastructure
 docker compose up --build
 ```
 
----
+#### Option B: Local Development (Bare Metal)
 
-### Step 3: Access Endpoints
+Recommended for active coding and step-through debugging.
 
-Once the application is running, it will automatically apply migrations and expose the following local URLs depending on how you started it:
+**macOS / Linux / WSL:**
+```bash
+make init
+```
 
-**Option A (Local Running - Port 5196)**
-- **API Base URL:** `http://localhost:5196`
-- **Swagger UI (Testing Interface):** `http://localhost:5196/swagger`
+This installs hooks, downloads models, and starts the API locally. Then in a separate terminal:
 
-**Option B (Docker Running - Port 8080)**
-- **API Base URL:** `http://localhost:8080`
-- **Swagger UI (Testing Interface):** `http://localhost:8080/swagger`
-
----
-
-## Quality Assurance & Code Style
-
-We use `make` targets to enforce code quality locally and in our CI/CD pipeline. Run these commands before pushing changes:
-
-| Command        | Description                                               |
-| -------------- | --------------------------------------------------------- |
-| `make format`  | Automatically fixes formatting and style issues globally. |
-| `make lint`    | Validates code style (fails if changes are needed).       |
-| `make build`   | Compiles the solution in Release mode to ensure zero bugs.|
-| `make test`    | Executes the full suite of xUnit tests.                   |
+```bash
+make frontend-dev
+```
 
 ---
 
-## Developer Operations (Makefile)
+### Step 3 — Access the Application
 
-If you are using macOS, Linux, or WSL, you can use the `Makefile` for standalone tasks. Here is the complete list of available commands:
+| Mode              | Frontend                      | API                           | Swagger UI                         |
+| ----------------- | ----------------------------- | ----------------------------- | ---------------------------------- |
+| **Docker**        | `http://localhost:5173`       | `http://localhost:8080`       | `http://localhost:8080/swagger`    |
+| **Local (API)**   | `http://localhost:5173`       | `http://localhost:5196`       | `http://localhost:5196/swagger`    |
 
-| Command                               | Description                                         |
-| ------------------------------------- | --------------------------------------------------- |
-| `make help`                           | Show all available commands                         |
-| `make init`                           | Full local setup (Hooks + Run API)                  |
-| `make init-docker`                    | Full Docker setup (Hooks + Start Containers)        |
-| `make setup-hooks`                    | Set up local Git pre-push hooks                     |
-| `make format`                         | Automatically fix code style issues                 |
-| `make lint`                           | Validate code style (fails if changes are needed)   |
-| `make build`                          | Build the solution in Release mode                  |
-| `make run`                            | Run the API locally                                 |
-| `make migration name=<Name>`          | Create a new EF Core migration                      |
-| `make db-update`                      | Apply pending EF Core migrations manually           |
-| `make test`                           | Run all unit tests                                  |
-| `make reset-all`                      | Clean, rebuild, and update database manually        |
-| `make docker-build`                   | Build development Docker image                      |
-| `make docker-up`                      | Start development Docker container                  |
-| `make docker-down`                    | Stop development Docker container                   |
+Database migrations are applied automatically on startup. No manual migration step is needed for first-time setup.
 
 ---
 
-## API Endpoints
+## Configuration Reference
 
-| Method | Endpoint            | Description                           |
-| ------ | ------------------- | ------------------------------------- |
-| POST   | `/api/audio/upload` | Upload an `.mp3` or `.wav` audio file |
-| GET    | `/api/audio/{id}` | Retrieve compression and summary status |
+### `infrastructure/.env`
 
-**Example request (using Docker port):**
+| Variable              | Required | Description                              |
+| --------------------- | -------- | ---------------------------------------- |
+| `BUCKET`              | ✅       | Supabase storage bucket name             |
+| `DB_CONNECTION_STRING`| ✅       | PostgreSQL connection string             |
+| `SUPABASE_URL`        | ✅       | Supabase project URL                     |
+| `SUPABASE_KEY`        | ✅       | Supabase service role key                |
+| `FRONTEND_ORIGIN`     | ❌       | CORS allowed origin (default: `http://localhost:5173`) |
+
+---
+
+## API Reference
+
+| Method | Endpoint              | Description                                              |
+| ------ | --------------------- | -------------------------------------------------------- |
+| `POST` | `/api/audio/upload`   | Upload an `.mp3` or `.wav` file; returns `202 Accepted` |
+| `GET`  | `/api/audio/{id}`     | Poll job status, compression URL, and summary           |
+
+**Example upload:**
 ```bash
 curl -X POST http://localhost:8080/api/audio/upload \
   -F "file=@/path/to/audio.mp3"
 ```
 
-**Example response:**
+**Example status response:**
 ```json
 {
-  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "id": "6730c377-a21c-4980-80c9-f0b77f9e6d7a",
   "fileName": "audio.mp3",
-  "storageUrl": "https://your-project.supabase.co/storage/v1/object/public/audio-files/uuid/audio.mp3",
-  "createdAt": "2025-01-01T00:00:00Z"
+  "compressionStatus": "Completed",
+  "compressedStorageUrl": "https://your-project.supabase.co/storage/v1/object/public/...",
+  "summaryStatus": "Completed",
+  "summary": "The speaker discussed quarterly results and outlined the roadmap for Q3.",
+  "summaryError": null
 }
 ```
 
+The API accepts `.mp3` and `.wav` files up to 50 MB. Upload returns immediately while the background service compresses the file and generates a summary in parallel. The frontend polls the status endpoint until both `compressionStatus` and `summaryStatus` reach a terminal state (`Completed` or `Failed`).
+
 ---
 
-## Architecture Overview
+## Quality Assurance
+
+Run these commands before pushing changes. The pre-push hook enforces them automatically.
+
+| Command        | Description                                               |
+| -------------- | --------------------------------------------------------- |
+| `make format`  | Automatically fixes formatting and style issues globally. |
+| `make lint`    | Validates code style (fails if changes are needed).       |
+| `make build`   | Compiles the solution in Release mode.                    |
+| `make test`    | Executes the full suite of xUnit tests.                   |
+| `make check`   | Runs all backend and frontend validations.                |
+
+---
+
+## Makefile Reference
+
+All automation is provided through `make`. Run `make help` to list all available targets.
+
+| Command                        | Description                                          |
+| ------------------------------ | ---------------------------------------------------- |
+| `make help`                    | Show all available commands                          |
+| `make init`                    | Local setup: hooks + models + run API                |
+| `make init-docker`             | Docker setup: hooks + models + build + start         |
+| `make setup-hooks`             | Install the Git pre-push hook                        |
+| `make download-models`         | Download missing Whisper and GGUF models             |
+| `make format`                  | Auto-fix code style issues                           |
+| `make lint`                    | Validate code style (fails if changes are needed)    |
+| `make build`                   | Build the solution in Release mode                   |
+| `make run`                     | Run the API locally                                  |
+| `make migration name=<Name>`   | Create a new EF Core migration                       |
+| `make db-update`               | Apply pending EF Core migrations manually            |
+| `make test`                    | Run all unit tests                                   |
+| `make reset-all`               | Clean, rebuild, and update the database              |
+| `make docker-build`            | Build Docker images                                  |
+| `make docker-up`               | Start all Docker containers                          |
+| `make docker-down`             | Stop all Docker containers                           |
+| `make backend-check`           | Run backend lint + build + tests                     |
+| `make frontend-install`        | Install frontend npm dependencies                    |
+| `make frontend-dev`            | Start the Vite dev server                            |
+| `make frontend-check`          | Run frontend lint + production build                 |
+
+---
+
+## Pre-push Hook & CI/CD
+
+The pre-push hook detects which parts of the repository changed and runs only the relevant validations:
+
+- `backend/**` changes → `make backend-check`
+- `frontend/**` changes → `make frontend-check`
+- Shared files (`Makefile`, Compose, CI, scripts) → both checks
+- Documentation-only changes → no application validation
+- If the commit range cannot be determined → both checks
+
+GitLab CI applies the same path-aware strategy using `rules:changes`. Backend and frontend pipelines are fully independent and run in parallel.
+
+---
+
+## Architecture
+
+```text
+React UI → frontend service layer → /api (Nginx proxy) → .NET API
+                                                        → Background Queue
+                                                              → FFmpeg (compression)
+                                                              → Whisper + LLM (summarization)
+                                                              → Supabase Storage
+```
 
 This project strictly follows **Clean Architecture**:
 
 ```text
-Domain
- └── Core entities, value objects, and pure domain exceptions (No external dependencies)
-
-Application
- └── Use cases, services, and interface ports (Strictly isolated from Infrastructure)
-
-Infrastructure
- └── EF Core DB context, migrations, Supabase storage, and external adapters
-
-Api
- └── HTTP controllers, minimal APIs, dependency injection container (`Program.cs`)
-
-Tests
- └── Focused unit tests for domain and application layers
+Domain          Core entities, value objects, and domain exceptions (zero dependencies)
+Application     Use cases, ports/interfaces (strictly isolated from Infrastructure)
+Infrastructure  EF Core, Supabase storage, FFmpeg, Whisper/LLM subprocess adapters
+Api             HTTP controllers, DI container, background worker host (Program.cs)
+Tests           Focused unit tests for domain and application layers
 ```
-
-## Local Audio Summary Models
-
-Each upload queues both compression and a local summary job. The summary path
-normalizes audio with FFmpeg, transcribes it with CPU-quantized `whisper.cpp`
-using the tiny English model, and sends the transcript to a local GGUF
-instruction model through `llama.cpp`. It does not use Ollama or an external AI
-API. The summary is validated and stored at no more than 50 characters.
-
-`make init` and `make init-docker` automatically run
-`scripts/download-models.sh`. It creates the ignored `models/` directory and
-downloads only missing files directly from the publisher-maintained Whisper.cpp
-and Qwen model repositories. No manual copying is required.
-
-```text
-models/ggml-tiny.en-q5_1.bin
-models/qwen2.5-0.5b-instruct-q5_k_m.gguf
-```
-
-`Qwen2.5-0.5B-Instruct` is below the 1.5B-parameter cap. The application uses
-one simultaneous model job by default (`LocalModelWorker:MaxConcurrentJobs=1`)
-to control CPU and memory consumption. Increase it only after benchmarking the
-target hardware. Model paths, executable paths, and timeout are configurable in
-`backend/src/AudioProcessor.Api/appsettings.json`.
-
-## Performance Baseline Logs
-
-Every queued compression and summary job emits structured `AudioPerformance`
-logs with `TimestampUtc`, `AudioId`, `JobType`, `CorrelationId`, `Stage`,
-`Status`, and `ElapsedMilliseconds`. The baseline stages include queue wait,
-database updates, audio download, compression, compressed-audio upload, AI
-request latency, speech-to-text, summarization, and end-to-end processing.
-Filter by `AudioId` or `CorrelationId` to reconstruct one pipeline execution,
-then aggregate `ElapsedMilliseconds` by `Stage` to compare later optimizations.

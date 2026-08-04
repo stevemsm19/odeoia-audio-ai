@@ -1,5 +1,6 @@
 INFRASTRUCTURE_DIR = infrastructure
 BACKEND_DIR = backend
+FRONTEND_DIR = frontend
 
 INFRASTRUCTURE_PROJECT = $(BACKEND_DIR)/src/AudioProcessor.Infrastructure/AudioProcessor.Infrastructure.csproj
 STARTUP_PROJECT = $(BACKEND_DIR)/src/AudioProcessor.Api/AudioProcessor.Api.csproj
@@ -11,7 +12,7 @@ GREEN := \033[32m
 RED := \033[31m
 NC := \033[0m
 
-.PHONY: help init init-docker setup-hooks download-models format lint build run migration db-update test reset-all docker-build docker-up docker-down
+.PHONY: help init init-docker setup-hooks download-models validate check backend-check backend-lint backend-build backend-test frontend-install frontend-dev frontend-lint frontend-build frontend-check format lint build run migration db-update test reset-all docker-build docker-up docker-down
 
 help: ## Show available commands
 	@echo ""
@@ -26,7 +27,34 @@ init-docker: setup-hooks download-models docker-up ## Initialize Containerized D
 download-models: ## Provision missing local Whisper and GGUF models
 	./scripts/download-models.sh
 
-validate: lint build test ## Validate code quality
+validate: check ## Validate the complete repository
+
+check: backend-check frontend-check ## Validate backend and frontend
+
+backend-check: backend-lint backend-build backend-test ## Validate the backend
+
+backend-lint: ## Validate backend code style
+	@$(MAKE) lint
+
+backend-build: ## Build the backend in Release mode
+	@$(MAKE) build
+
+backend-test: ## Run backend unit tests
+	@$(MAKE) test
+
+frontend-install: ## Install frontend dependencies from the lockfile
+	npm ci --prefix $(FRONTEND_DIR)
+
+frontend-dev: ## Start the Vite frontend development server
+	npm run dev --prefix $(FRONTEND_DIR)
+
+frontend-lint: ## Lint frontend source files
+	npm run lint --prefix $(FRONTEND_DIR)
+
+frontend-build: ## Create the frontend production build
+	npm run build --prefix $(FRONTEND_DIR)
+
+frontend-check: frontend-lint frontend-build ## Validate the frontend
 
 setup-hooks: ## Set up local Git pre-push hooks
 	@echo "$(YELLOW)Setting up Git pre-push hook...$(NC)"

@@ -1,29 +1,74 @@
 #!/bin/sh
 
-# Git pre-push hook script to validate code quality before pushing.
-# If any validation fails, the push is aborted.
+# Validate only the projects affected by the commits being pushed. When the
+# commit range cannot be determined safely, validate both applications.
+set -eu
 
-echo "============================================="
-echo "        Running Git Pre-Push Hook            "
-echo "============================================="
+remote_name=${1:-origin}
+zero_sha=0000000000000000000000000000000000000000
+changed_files=""
+range_known=true
 
-echo ""
-echo "Running project validation..."
-echo ""
+while read -r local_ref local_sha remote_ref remote_sha; do
+    [ -n "${local_sha:-}" ] || continue
 
-if ! make validate; then
-    echo ""
-    echo "============================================="
-    echo "Error: Pre-push validation failed!"
-    echo "Please fix the issues before pushing."
-    echo "============================================="
-    exit 1
+    if [ "$remote_sha" != "$zero_sha" ]; then
+        changed_files="$changed_files\n$(git diff --name-only "$remote_sha" "$local_sha")"
+    else
+        new_commits=$(git rev-list "$local_sha" --not --remotes="$remote_name" 2>/dev/null || true)
+        if [ -z "$new_commits" ]; then
+            range_known=false
+        else
+            for commit in $new_commits; do
+                changed_files="$changed_files\n$(git diff-tree --no-commit-id --name-only -r "$commit")"
+            done
+        fi
+    fi
+done
+
+if [ -z "$changed_files" ]; then
+    range_known=false
 fi
 
-echo ""
-echo "============================================="
-echo "Pre-push validations passed successfully!"
-echo "Proceeding with push."
-echo "============================================="
+backend_changed=false
+frontend_changed=false
 
-exit 0
+if [ "$range_known" = false ]; then
+    echo "Unable to determine the pushed commit range. Running all validations."
+    backend_changed=true
+    frontend_changed=true
+else
+    printf '%b\n' "$changed_files" | while IFS= read -r file; do
+        [ -n "$file" ] || continue
+        case "$file" in
+            backend/*) echo "backend" ;;
+            frontend/*) echo "frontend" ;;
+            Makefile|.gitlab-ci.yml|.gitignore|infrastructure/*|scripts/*|AGENTS.md) echo "shared" ;;
+            docs/*|README.md) echo "documentation" ;;
+            *) echo "shared" ;;
+        esac
+    done | sort -u > "${TMPDIR:-/tmp}/odeoia-pre-push-paths-$$"
+
+    classifications=$(cat "${TMPDIR:-/tmp}/odeoia-pre-push-paths-$$")
+    rm -f "${TMPDIR:-/tmp}/odeoia-pre-push-paths-$$"
+    case "$classifications" in *backend*) backend_changed=true ;; esac
+    case "$classifications" in *frontend*) frontend_changed=true ;; esac
+    case "$classifications" in *shared*) backend_changed=true; frontend_changed=true ;; esac
+fi
+
+if [ "$backend_changed" = false ] && [ "$frontend_changed" = false ]; then
+    echo "Only documentation changed. No application validation is required."
+    exit 0
+fi
+
+if [ "$backend_changed" = true ]; then
+    echo "Detected backend or shared changes. Running backend validations..."
+    make backend-check
+fi
+
+if [ "$frontend_changed" = true ]; then
+    echo "Detected frontend or shared changes. Running frontend validations..."
+    make frontend-check
+fi
+
+echo "All required pre-push validations completed successfully."

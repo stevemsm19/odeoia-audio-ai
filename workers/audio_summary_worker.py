@@ -93,6 +93,13 @@ def main() -> int:
             print(json.dumps({"summary": "No speech detected", "speechToTextElapsedMilliseconds": speech_to_text_elapsed_ms, "summarizationElapsedMilliseconds": 0}))
             return 0
 
+        # Cap the transcript so the prompt always fits inside the context window.
+        # With a 500-char summary target, 256 output tokens, and prompt overhead,
+        # ~20 000 characters of transcript safely fits within 8 192 tokens.
+        MAX_TRANSCRIPT_CHARS = 20_000
+        if len(transcript) > MAX_TRANSCRIPT_CHARS:
+            transcript = transcript[:MAX_TRANSCRIPT_CHARS].rsplit(" ", 1)[0] + " [truncated]"
+
         prompt = (
             "Summarize this speech in at most 500 characters. Return only the summary, "
             "without labels, quotes, or explanation.\nSpeech:\n" + transcript
@@ -101,7 +108,7 @@ def main() -> int:
         summarization_started = time.perf_counter()
         result = run([
             args.llama_cli, "-m", args.llm_model, "-p", prompt,
-            "-n", "256", "-c", "2048", "-t", "2", "--temp", "0",
+            "-n", "256", "-c", "8192", "-t", "2", "--temp", "0",
             "--no-display-prompt", "--no-conversation", "--single-turn", "--simple-io", "--log-disable",
         ])
         

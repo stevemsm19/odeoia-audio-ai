@@ -1,0 +1,118 @@
+.auth-page {
+  min-height: calc(100vh - 165px);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: linear-gradient(90deg, #e7e5fb 0 50%, var(--paper) 50%);
+}
+.auth-copy {
+  align-content: center;
+  padding: 112px 90px 80px 32px;
+}
+.auth-copy h1 {
+  font:
+    600 clamp(43px, 5vw, 66px) / 1 "Playfair Display",
+    Georgia,
+    serif;
+  letter-spacing: -2.5px;
+  margin: 21px 0;
+}
+.auth-copy p {
+  color: #566070;
+  font-size: 17px;
+  line-height: 1.6;
+  max-width: 440px;
+}
+.auth-stat {
+  border-top: 1px solid #c7c3ed;
+  margin-top: 45px;
+  padding-top: 17px;
+  display: flex;
+  gap: 18px;
+  align-items: center;
+}
+.auth-stat strong {
+  font-family: "DM Mono";
+  font-size: 13px;
+  color: var(--primary);
+}
+.auth-stat span {
+  font-size: 13px;
+  color: var(--muted);
+}
+.auth-card {
+  align-content: center;
+  background: #fff;
+  padding: 38px;
+  box-shadow: var(--shadow);
+}
+.auth-card h2 {
+  font:
+    600 35px "Playfair Display",
+    Georgia,
+    serif;
+  letter-spacing: -1px;
+  margin: 14px 0 8px;
+}
+.muted {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0 0 26px;
+}
+.field {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 17px;
+}
+.field input {
+  width: 100%;
+  border: 1px solid #d6d8dc;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 7px;
+  color: var(--ink);
+  transition: 0.15s;
+}
+.field input:focus {
+  border-color: var(--primary);
+}
+.field input[aria-invalid="true"] {
+  border-color: #c64b48;
+}
+.form-switch {
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  margin: 22px 0 0;
+}
+.form-switch a {
+  color: var(--primary);
+  font-weight: bold;
+}
+@media (max-width: 760px) {
+  .auth-page {
+    display: block;
+    background: var(--paper);
+  }
+  .auth-copy {
+    padding: 62px 25px 50px;
+    background: #e7e5fb;
+    max-width: none;
+  }
+  .auth-card {
+    margin: -17px auto 55px;
+    width: calc(100% - 36px);
+    padding: 27px 22px;
+  }
+  .auth-card h2 {
+    font-size: 31px;
+  }
+}
+@media (min-width: 761px) and (max-width: 960px) {
+  .auth-copy {
+    padding-right: 50px;
+  }
+  .auth-card {
+    margin-left: 36px;
+  }
+}
