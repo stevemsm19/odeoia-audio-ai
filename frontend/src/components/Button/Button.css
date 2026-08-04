@@ -1,0 +1,43 @@
+.button {
+  border: 0;
+  background: var(--primary);
+  color: #fff;
+  border-radius: 9px;
+  padding: 12px 18px;
+  font-weight: 700;
+  line-height: 1;
+  transition: 0.18s ease;
+  display: inline-flex;
+  gap: 9px;
+  align-items: center;
+  justify-content: center;
+}
+.button:hover:not(:disabled) {
+  background: var(--primary-dark);
+  transform: translateY(-1px);
+}
+.button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+.secondary {
+  background: #edecef;
+  color: var(--ink);
+}
+.secondary:hover:not(:disabled) {
+  background: #e0dfe5;
+  color: var(--ink);
+}
+.spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

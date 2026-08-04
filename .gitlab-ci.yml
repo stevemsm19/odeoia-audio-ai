@@ -1,54 +1,75 @@
-# Global configurations and variables for .NET CI Pipeline
 variables:
-  # Define the path to cache NuGet packages locally
   NUGET_PACKAGES_DIR: "$CI_PROJECT_DIR/.nuget/packages"
-  # Opt-out of .NET CLI telemetry messages to clean up console logs
   DOTNET_CLI_TELEMETRY_OPTOUT: "true"
-  # Suppress the welcome logo on dotnet CLI executions
   DOTNET_NOLOGO: "true"
-
-# Define the global caching policy for NuGet packages across stages
-cache:
-  key: "$CI_COMMIT_REF_SLUG"
-  paths:
-    - .nuget/packages/
 
 stages:
   - lint
   - build
   - test
 
-lint:
+.backend-rules: &backend-rules
+  rules:
+    - changes:
+        - backend/**/*
+        - Makefile
+        - .gitlab-ci.yml
+        - .gitignore
+        - infrastructure/**/*
+        - scripts/**/*
+
+.frontend-rules: &frontend-rules
+  rules:
+    - changes:
+        - frontend/**/*
+        - Makefile
+        - .gitlab-ci.yml
+        - .gitignore
+        - infrastructure/**/*
+        - scripts/**/*
+
+.dotnet-job: &dotnet-job
+  image: mcr.microsoft.com/dotnet/sdk:8.0
+  cache:
+    key: "$CI_COMMIT_REF_SLUG-dotnet"
+    paths:
+      - .nuget/packages/
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends make && rm -rf /var/lib/apt/lists/*
+
+backend-lint:
+  <<: [*dotnet-job, *backend-rules]
   stage: lint
-  image: mcr.microsoft.com/dotnet/sdk:8.0
-  cache:
-    key: "$CI_COMMIT_REF_SLUG"
-    paths:
-      - .nuget/packages/
-    policy: pull
-  before_script:
-    - apt-get update && apt-get install -y --no-install-recommends make && rm -rf /var/lib/apt/lists/*
-    - dotnet restore backend/AudioProcessor.sln
-  script:
-    - make lint
+  script: ["make backend-lint"]
 
-build:
+backend-build:
+  <<: [*dotnet-job, *backend-rules]
   stage: build
-  image: mcr.microsoft.com/dotnet/sdk:8.0
-  before_script:
-    - apt-get update && apt-get install -y --no-install-recommends make && rm -rf /var/lib/apt/lists/*
-  script:
-    - make build
+  script: ["make backend-build"]
 
-test:
+backend-test:
+  <<: [*dotnet-job, *backend-rules]
   stage: test
-  image: mcr.microsoft.com/dotnet/sdk:8.0
+  script: ["make backend-test"]
+
+frontend-lint:
+  image: node:24-alpine
+  <<: *frontend-rules
+  stage: lint
   cache:
-    key: "$CI_COMMIT_REF_SLUG"
-    paths:
-      - .nuget/packages/
-    policy: pull
+    key: "$CI_COMMIT_REF_SLUG-frontend"
+    paths: [frontend/.npm/]
   before_script:
-    - apt-get update && apt-get install -y --no-install-recommends make && rm -rf /var/lib/apt/lists/*
-  script:
-    - make test
+    - npm ci --prefix frontend --cache frontend/.npm
+  script: ["npm run lint --prefix frontend"]
+
+frontend-build:
+  image: node:24-alpine
+  <<: *frontend-rules
+  stage: build
+  cache:
+    key: "$CI_COMMIT_REF_SLUG-frontend"
+    paths: [frontend/.npm/]
+  before_script:
+    - npm ci --prefix frontend --cache frontend/.npm
+  script: ["npm run build --prefix frontend"]

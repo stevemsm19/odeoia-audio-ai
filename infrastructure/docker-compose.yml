@@ -10,5 +10,14 @@ services:
       - .env
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
+      - FRONTEND_ORIGIN=http://localhost:5173
     volumes:
       - ../models:/models:ro
+  odeoia-frontend:
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - audio-processor-api

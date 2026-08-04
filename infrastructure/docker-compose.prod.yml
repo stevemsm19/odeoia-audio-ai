@@ -6,3 +6,12 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
     restart: unless-stopped
+  odeoia-frontend:
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - audio-processor-api
+    restart: unless-stopped

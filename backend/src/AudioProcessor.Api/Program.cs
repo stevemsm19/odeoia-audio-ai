@@ -41,6 +41,16 @@ static string? FindEnvFile()
 
 var builder = WebApplication.CreateBuilder(args);
 
+const string frontendCorsPolicy = "FrontendDevelopment";
+string frontendOrigin = Environment.GetEnvironmentVariable("FRONTEND_ORIGIN") ?? "http://localhost:5173";
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(frontendCorsPolicy, policy => policy
+        .WithOrigins(frontendOrigin)
+        .AllowAnyHeader()
+        .AllowAnyMethod());
+});
+
 // Bind Supabase options from environment variables
 builder.Services.Configure<AppSupabaseOptions>(options =>
 {
@@ -114,6 +124,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Audio Processor API v1"));
 }
 
+app.UseCors(frontendCorsPolicy);
 app.UseAuthorization();
 app.MapControllers();
 app.MapGet("/", () => "Audio Processor API is running!");
