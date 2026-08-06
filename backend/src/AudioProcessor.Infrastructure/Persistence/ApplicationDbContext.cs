@@ -62,9 +62,25 @@ namespace AudioProcessor.Infrastructure.Persistence
                     .HasColumnType("bigint")
                     .IsRequired(false);
 
-                entity.Property(e => e.Summary)
-                    .HasColumnName("summary")
-                    .HasMaxLength(500)
+                entity.Property(e => e.TranscriptionStatus)
+                    .HasColumnName("transcription_status")
+                    .HasConversion<string>()
+                    .HasMaxLength(50)
+                    .IsRequired();
+
+                entity.Property(e => e.TranscriptionDurationMs)
+                    .HasColumnName("transcription_duration_ms")
+                    .HasColumnType("bigint")
+                    .IsRequired(false);
+
+                entity.Property(e => e.TranscriptionError)
+                    .HasColumnName("transcription_error")
+                    .HasMaxLength(1000)
+                    .IsRequired(false);
+
+                entity.Property(e => e.SummaryStorageUrl)
+                    .HasColumnName("summary_storage_url")
+                    .HasMaxLength(2048)
                     .IsRequired(false);
 
                 entity.Property(e => e.SummaryStatus)

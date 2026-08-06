@@ -1,0 +1,84 @@
+.pipeline-status {
+  margin-top: 25px;
+}
+.pipeline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.pipeline-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 13px;
+  border-radius: 10px;
+  background: #f2f1ed;
+  font-size: 13px;
+}
+.pipeline-icon {
+  width: 20px;
+  flex: none;
+  text-align: center;
+  font-size: 13px;
+}
+.pipeline-label {
+  flex: 1;
+  font-weight: 600;
+}
+.pipeline-state {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.pipeline-row--pending {
+  color: var(--muted);
+}
+
+.pipeline-row--processing {
+  background: var(--soft);
+}
+.pipeline-row--processing .pipeline-icon {
+  color: var(--primary);
+  animation: pipeline-pulse 1.3s infinite;
+}
+.pipeline-row--processing .pipeline-state {
+  color: var(--primary);
+}
+
+.pipeline-row--completed {
+  background: #f1f7db;
+}
+.pipeline-row--completed .pipeline-icon {
+  color: #6b7c1f;
+}
+.pipeline-row--completed .pipeline-state {
+  color: #687038;
+}
+
+.pipeline-row--failed {
+  background: #fff1f0;
+}
+.pipeline-row--failed .pipeline-icon,
+.pipeline-row--failed .pipeline-state {
+  color: #993e36;
+}
+
+.pipeline-row--waiting {
+  color: var(--muted);
+}
+
+.pipeline-row--notimplemented {
+  color: var(--muted);
+  background: transparent;
+  border: 1px dashed var(--line);
+}
+
+@keyframes pipeline-pulse {
+  50% {
+    transform: scale(1.2);
+    opacity: 0.55;
+  }
+}

@@ -2,7 +2,7 @@ services:
   audio-processor-api:
     build:
       context: ..
-      dockerfile: infrastructure/Dockerfile
+      dockerfile: backend/Dockerfile
     container_name: audio-processor-api
     ports:
       - "8080:8080"

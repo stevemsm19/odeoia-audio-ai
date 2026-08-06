@@ -1,17 +1,19 @@
 # OdeoIA
 
-OdeoIA is a full-stack audio-processing application. The .NET 8 API follows Clean Architecture and performs asynchronous audio compression and AI-powered summarization in a background worker. The React/Vite frontend uploads audio, polls the real job status, and plays the processed AAC file alongside the generated summary when it is ready.
+OdeoIA is a full-stack audio-processing application. The .NET 8 API follows Clean Architecture and runs audio compression and AI-powered transcription/summarization as two independent background flows, each on its own explicit `Thread`. The React/Vite frontend uploads audio, polls the real job status, and plays the processed AAC file alongside the generated summary when it is ready.
 
 ## Repository Structure
 
 ```text
-backend/         .NET 8 API — Clean Architecture, use cases, xUnit tests
-frontend/        React + Vite client
-infrastructure/  Docker Compose, API Dockerfile, Nginx proxy configuration
-workers/         Python worker script for local Whisper + LLM summarization
+backend/         .NET 8 API — Clean Architecture, use cases, xUnit tests, own Dockerfile
+frontend/        React + Vite client, own Dockerfile
+infrastructure/  Docker Compose, Nginx proxy configuration, centralized env files
+workers/         Python worker script(s) for local Whisper + LLM summarization
 scripts/         Git hooks and model download automation
 models/          Local AI models (Whisper + GGUF) — provisioned by init-docker
 ```
+
+Each service owns its Dockerfile in its own folder (`backend/Dockerfile`, `frontend/Dockerfile`); `infrastructure/` holds orchestration only.
 
 ---
 
@@ -144,7 +146,7 @@ Database migrations are applied automatically on startup. No manual migration st
 | Method | Endpoint              | Description                                              |
 | ------ | --------------------- | -------------------------------------------------------- |
 | `POST` | `/api/audio/upload`   | Upload an `.mp3` or `.wav` file; returns `202 Accepted` |
-| `GET`  | `/api/audio/{id}`     | Poll job status, compression URL, and summary           |
+| `GET`  | `/api/audio/{id}`     | Poll overall/per-stage status, compression URL, and summary URL |
 
 **Example upload:**
 ```bash
@@ -157,15 +159,18 @@ curl -X POST http://localhost:8080/api/audio/upload \
 {
   "id": "6730c377-a21c-4980-80c9-f0b77f9e6d7a",
   "fileName": "audio.mp3",
+  "overallStatus": "Processing",
   "compressionStatus": "Completed",
   "compressedStorageUrl": "https://your-project.supabase.co/storage/v1/object/public/...",
-  "summaryStatus": "Completed",
-  "summary": "The speaker discussed quarterly results and outlined the roadmap for Q3.",
+  "transcriptionStatus": "Completed",
+  "transcriptionError": null,
+  "summaryStatus": "Processing",
+  "summaryStorageUrl": null,
   "summaryError": null
 }
 ```
 
-The API accepts `.mp3` and `.wav` files up to 50 MB. Upload returns immediately while the background service compresses the file and generates a summary in parallel. The frontend polls the status endpoint until both `compressionStatus` and `summaryStatus` reach a terminal state (`Completed` or `Failed`).
+The API accepts `.mp3` and `.wav` files up to 50 MB. Upload returns immediately while two independent flows run in the background: Compression (FFmpeg) and Transcription→Summary (Whisper, then an LLM), each on its own `Thread`. `overallStatus` is a single computed field (`Pending` / `Processing` / `Completed` — never `Failed`) meaning "every stage reached a terminal state," not a success verdict; poll it to know when to stop polling, and read the per-stage fields (`compressionStatus`, `transcriptionStatus`, `summaryStatus`, each `Pending`/`Processing`/`Completed`/`Failed`) to know what actually happened.
 
 ---
 
@@ -208,7 +213,8 @@ All automation is provided through `make`. Run `make help` to list all available
 | `make backend-check`           | Run backend lint + build + tests                     |
 | `make frontend-install`        | Install frontend npm dependencies                    |
 | `make frontend-dev`            | Start the Vite dev server                            |
-| `make frontend-check`          | Run frontend lint + production build                 |
+| `make frontend-test`           | Run frontend unit tests (Vitest)                     |
+| `make frontend-check`          | Run frontend lint + production build + tests         |
 
 ---
 
@@ -230,18 +236,21 @@ GitLab CI applies the same path-aware strategy using `rules:changes`. Backend an
 
 ```text
 React UI → frontend service layer → /api (Nginx proxy) → .NET API
-                                                        → Background Queue
-                                                              → FFmpeg (compression)
-                                                              → Whisper + LLM (summarization)
-                                                              → Supabase Storage
+                                                        → one explicit Thread per flow, per audio
+                                                              → Flujo 1: FFmpeg (compression)
+                                                              → Flujo 2: Whisper (transcription) → LLM (summarization)
+                                                        → shared SemaphoreSlim (limits concurrent external processes)
+                                                        → Supabase Storage / Postgres
 ```
+
+Both flows are launched directly from the upload request (no queue, no shared worker pool) and run independently — see `AGENTS.md` section 4 for the concurrency model.
 
 This project strictly follows **Clean Architecture**:
 
 ```text
 Domain          Core entities, value objects, and domain exceptions (zero dependencies)
 Application     Use cases, ports/interfaces (strictly isolated from Infrastructure)
-Infrastructure  EF Core, Supabase storage, FFmpeg, Whisper/LLM subprocess adapters
-Api             HTTP controllers, DI container, background worker host (Program.cs)
-Tests           Focused unit tests for domain and application layers
+Infrastructure  EF Core, Supabase storage, FFmpeg, Whisper/LLM subprocess adapters, Thread launcher
+Api             HTTP controllers, DI container (Program.cs)
+Tests           Unit tests for domain, application, and infrastructure layers
 ```

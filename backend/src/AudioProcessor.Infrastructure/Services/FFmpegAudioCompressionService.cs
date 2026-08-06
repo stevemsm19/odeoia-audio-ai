@@ -15,10 +15,12 @@ namespace AudioProcessor.Infrastructure.Services
     /// </summary>
     public class FFmpegAudioCompressionService : IAudioCompressionService
     {
+        private readonly SemaphoreSlim _externalProcessSemaphore;
         private readonly ILogger<FFmpegAudioCompressionService> _logger;
 
-        public FFmpegAudioCompressionService(ILogger<FFmpegAudioCompressionService> logger)
+        public FFmpegAudioCompressionService(SemaphoreSlim externalProcessSemaphore, ILogger<FFmpegAudioCompressionService> logger)
         {
+            _externalProcessSemaphore = externalProcessSemaphore;
             _logger = logger;
         }
 
@@ -49,7 +51,8 @@ namespace AudioProcessor.Infrastructure.Services
                     await sourceStream.CopyToAsync(fileStream, cancellationToken);
                 }
 
-                await RunFFmpegProcessAsync(tempInputPath, tempOutputPath, cancellationToken);
+                // Deliberately blocking: runs on its own explicit Thread, not ordinary async I/O.
+                RunFFmpegProcess(tempInputPath, tempOutputPath, cancellationToken);
 
                 var memoryStream = new MemoryStream();
                 using (var fileStream = new FileStream(tempOutputPath, FileMode.Open, FileAccess.Read, FileShare.Read))
@@ -68,7 +71,7 @@ namespace AudioProcessor.Infrastructure.Services
             }
         }
 
-        private async Task RunFFmpegProcessAsync(string inputPath, string outputPath, CancellationToken cancellationToken)
+        private void RunFFmpegProcess(string inputPath, string outputPath, CancellationToken cancellationToken)
         {
             var startInfo = new ProcessStartInfo
             {
@@ -84,30 +87,48 @@ namespace AudioProcessor.Infrastructure.Services
                 CreateNoWindow = true
             };
 
-            using var process = new Process { StartInfo = startInfo };
-            var stderrBuilder = new StringBuilder();
-
-            process.ErrorDataReceived += (sender, e) =>
-            {
-                if (e.Data != null)
-                {
-                    stderrBuilder.AppendLine(e.Data);
-                }
-            };
-
-            _logger.LogInformation("Launching FFmpeg process with arguments: {Args}", startInfo.Arguments);
-
-            if (!process.Start())
-            {
-                throw new InvalidOperationException("Failed to start FFmpeg process. Is FFmpeg installed and in the system PATH?");
-            }
-
-            process.BeginErrorReadLine();
-            process.BeginOutputReadLine();
-
+            _externalProcessSemaphore.Wait(cancellationToken);
             try
             {
-                await process.WaitForExitAsync(cancellationToken);
+                using var process = new Process { StartInfo = startInfo };
+                var stderrBuilder = new StringBuilder();
+
+                process.ErrorDataReceived += (sender, e) =>
+                {
+                    if (e.Data != null)
+                    {
+                        stderrBuilder.AppendLine(e.Data);
+                    }
+                };
+
+                _logger.LogInformation("Launching FFmpeg process with arguments: {Args}", startInfo.Arguments);
+
+                if (!process.Start())
+                {
+                    throw new InvalidOperationException("Failed to start FFmpeg process. Is FFmpeg installed and in the system PATH?");
+                }
+
+                process.BeginErrorReadLine();
+                process.BeginOutputReadLine();
+
+                using var cancellationRegistration = cancellationToken.Register(() =>
+                {
+                    _logger.LogWarning("Audio compression cancelled. Terminating FFmpeg process...");
+                    try
+                    {
+                        if (!process.HasExited)
+                        {
+                            process.Kill(entireProcessTree: true);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to terminate FFmpeg process tree during cancellation.");
+                    }
+                });
+
+                process.WaitForExit();
+                cancellationToken.ThrowIfCancellationRequested();
 
                 if (process.ExitCode != 0)
                 {
@@ -116,21 +137,9 @@ namespace AudioProcessor.Infrastructure.Services
                     throw new InvalidOperationException($"FFmpeg compression failed with exit code {process.ExitCode}.");
                 }
             }
-            catch (OperationCanceledException)
+            finally
             {
-                _logger.LogWarning("Audio compression cancelled. Terminating FFmpeg process...");
-                try
-                {
-                    if (!process.HasExited)
-                    {
-                        process.Kill(entireProcessTree: true);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to terminate FFmpeg process tree during cancellation.");
-                }
-                throw;
+                _externalProcessSemaphore.Release();
             }
         }
 

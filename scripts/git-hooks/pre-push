@@ -2,7 +2,21 @@
 
 # Validate only the projects affected by the commits being pushed. When the
 # commit range cannot be determined safely, validate both applications.
+# Validation itself is never reimplemented here — only `make backend-check`/
+# `make frontend-check` are called. 
 set -eu
+
+# A function, not an inline `case` inside `$(...)`: bash 3.2 (still /bin/sh
+# on macOS) fails to parse a `case` nested directly in command substitution.
+classify_file() {
+    case "$1" in
+        backend/*) echo "backend" ;;
+        frontend/*) echo "frontend" ;;
+        Makefile|.gitlab-ci.yml|.gitignore|infrastructure/*|scripts/*) echo "shared" ;;
+        docs/*|README.md) echo "documentation" ;;
+        *) echo "shared" ;;
+    esac
+}
 
 remote_name=${1:-origin}
 zero_sha=0000000000000000000000000000000000000000
@@ -38,19 +52,11 @@ if [ "$range_known" = false ]; then
     backend_changed=true
     frontend_changed=true
 else
-    printf '%b\n' "$changed_files" | while IFS= read -r file; do
+    classifications=$(printf '%b\n' "$changed_files" | while IFS= read -r file; do
         [ -n "$file" ] || continue
-        case "$file" in
-            backend/*) echo "backend" ;;
-            frontend/*) echo "frontend" ;;
-            Makefile|.gitlab-ci.yml|.gitignore|infrastructure/*|scripts/*|AGENTS.md) echo "shared" ;;
-            docs/*|README.md) echo "documentation" ;;
-            *) echo "shared" ;;
-        esac
-    done | sort -u > "${TMPDIR:-/tmp}/odeoia-pre-push-paths-$$"
+        classify_file "$file"
+    done | sort -u)
 
-    classifications=$(cat "${TMPDIR:-/tmp}/odeoia-pre-push-paths-$$")
-    rm -f "${TMPDIR:-/tmp}/odeoia-pre-push-paths-$$"
     case "$classifications" in *backend*) backend_changed=true ;; esac
     case "$classifications" in *frontend*) frontend_changed=true ;; esac
     case "$classifications" in *shared*) backend_changed=true; frontend_changed=true ;; esac

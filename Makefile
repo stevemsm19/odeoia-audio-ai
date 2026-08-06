@@ -12,7 +12,7 @@ GREEN := \033[32m
 RED := \033[31m
 NC := \033[0m
 
-.PHONY: help init init-docker setup-hooks download-models validate check backend-check backend-lint backend-build backend-test frontend-install frontend-dev frontend-lint frontend-build frontend-check format lint build run migration db-update test reset-all docker-build docker-up docker-down
+.PHONY: help init init-docker setup-hooks download-models validate check backend-check backend-lint backend-build backend-test frontend-install frontend-dev frontend-lint frontend-build frontend-test frontend-check format lint build run migration db-update test reset-all docker-build docker-up docker-down
 
 help: ## Show available commands
 	@echo ""
@@ -54,7 +54,10 @@ frontend-lint: ## Lint frontend source files
 frontend-build: ## Create the frontend production build
 	npm run build --prefix $(FRONTEND_DIR)
 
-frontend-check: frontend-lint frontend-build ## Validate the frontend
+frontend-test: ## Run frontend unit tests (Vitest)
+	npm run test --prefix $(FRONTEND_DIR)
+
+frontend-check: frontend-lint frontend-build frontend-test ## Validate the frontend
 
 setup-hooks: ## Set up local Git pre-push hooks
 	@echo "$(YELLOW)Setting up Git pre-push hook...$(NC)"
