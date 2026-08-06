@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using AudioProcessor.Application.Interfaces;
 using AudioProcessor.Domain.Entities;
 using AudioProcessor.Domain.Enums;
-using AudioProcessor.Application.Models;
+using AudioProcessor.Application.Logging;
 using Microsoft.Extensions.Logging;
 
 //TODO: Divide in command handler and command
@@ -46,7 +46,9 @@ namespace AudioProcessor.Application.UseCases
         /// </summary>
         /// <param name="audioRecordId">The unique identifier of the audio record to process.</param>
         /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-        /// <exception cref="Exception">Propagates any encountered transient or processing errors to ensure the queue consumer can handle them.</exception>
+        /// <remarks>
+        /// Failures are fully handled here (logged, persisted as <c>Failed</c>) and never rethrown.
+        /// </remarks>
         public async Task HandleAsync(Guid audioRecordId, string correlationId = "none", CancellationToken cancellationToken = default)
         {
             var total = Stopwatch.StartNew();
@@ -69,7 +71,7 @@ namespace AudioProcessor.Application.UseCases
             record.MarkAsProcessing();
             var databaseUpdate = Stopwatch.StartNew();
             await _audioRepository.UpdateAudioRecordAsync(record, cancellationToken);
-            AudioPerformanceLog.Write(_logger, audioRecordId, AudioProcessingJobType.Compression, correlationId, "DatabaseUpdate", "Completed", databaseUpdate.ElapsedMilliseconds);
+            AudioPerformanceLog.Write(_logger, audioRecordId, "Compression", correlationId, "DatabaseUpdate", "Completed", databaseUpdate.ElapsedMilliseconds);
 
             Stream? originalStream = null;
             Stream? compressedStream = null;
@@ -83,11 +85,11 @@ namespace AudioProcessor.Application.UseCases
                 response.EnsureSuccessStatusCode();
 
                 originalStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-                AudioPerformanceLog.Write(_logger, audioRecordId, AudioProcessingJobType.Compression, correlationId, "AudioDownload", "Completed", download.ElapsedMilliseconds);
+                AudioPerformanceLog.Write(_logger, audioRecordId, "Compression", correlationId, "AudioDownload", "Completed", download.ElapsedMilliseconds);
                 _logger.LogInformation("Invoking audio compression service for {FileName}", record.FileName);
                 var compression = Stopwatch.StartNew();
                 compressedStream = await _audioCompressionService.CompressToAacAsync(originalStream, record.FileName, cancellationToken);
-                AudioPerformanceLog.Write(_logger, audioRecordId, AudioProcessingJobType.Compression, correlationId, "Compression", "Completed", compression.ElapsedMilliseconds);
+                AudioPerformanceLog.Write(_logger, audioRecordId, "Compression", correlationId, "Compression", "Completed", compression.ElapsedMilliseconds);
 
                 string compressedFileName = Path.ChangeExtension(record.FileName, ".aac");
                 _logger.LogInformation("Uploading compressed audio to storage as {FileName}", compressedFileName);
@@ -99,18 +101,16 @@ namespace AudioProcessor.Application.UseCases
                     "audio/aac",
                     record.Id,
                     cancellationToken);
-                AudioPerformanceLog.Write(_logger, audioRecordId, AudioProcessingJobType.Compression, correlationId, "CompressedAudioUpload", "Completed", upload.ElapsedMilliseconds);
+                AudioPerformanceLog.Write(_logger, audioRecordId, "Compression", correlationId, "CompressedAudioUpload", "Completed", upload.ElapsedMilliseconds);
 
                 stopwatch.Stop();
 
                 record.MarkAsCompleted(compressedStorageUrl, stopwatch.ElapsedMilliseconds);
                 databaseUpdate.Restart();
                 await _audioRepository.UpdateAudioRecordAsync(record, cancellationToken);
-                AudioPerformanceLog.Write(_logger, audioRecordId, AudioProcessingJobType.Compression, correlationId, "DatabaseUpdate", "Completed", databaseUpdate.ElapsedMilliseconds);
+                AudioPerformanceLog.Write(_logger, audioRecordId, "Compression", correlationId, "DatabaseUpdate", "Completed", databaseUpdate.ElapsedMilliseconds);
 
-                _logger.LogInformation("Audio compression completed successfully for Record ID {Id} in {Duration} ms. URL: {Url}",
-                    audioRecordId, stopwatch.ElapsedMilliseconds, compressedStorageUrl);
-                AudioPerformanceLog.Write(_logger, audioRecordId, AudioProcessingJobType.Compression, correlationId, "EndToEnd", "Completed", total.ElapsedMilliseconds);
+                AudioPerformanceLog.Write(_logger, audioRecordId, "Compression", correlationId, "EndToEnd", "Completed", total.ElapsedMilliseconds);
             }
             catch (Exception ex)
             {
@@ -122,15 +122,14 @@ namespace AudioProcessor.Application.UseCases
                     record.MarkAsFailed(stopwatch.ElapsedMilliseconds);
                     databaseUpdate.Restart();
                     await _audioRepository.UpdateAudioRecordAsync(record, cancellationToken);
-                    AudioPerformanceLog.Write(_logger, audioRecordId, AudioProcessingJobType.Compression, correlationId, "DatabaseUpdate", "Completed", databaseUpdate.ElapsedMilliseconds);
+                    AudioPerformanceLog.Write(_logger, audioRecordId, "Compression", correlationId, "DatabaseUpdate", "Completed", databaseUpdate.ElapsedMilliseconds);
                 }
                 catch (Exception dbEx)
                 {
                     _logger.LogError(dbEx, "Failed to mark record {Id} as Failed in the database.", audioRecordId);
                 }
 
-                AudioPerformanceLog.Write(_logger, audioRecordId, AudioProcessingJobType.Compression, correlationId, "EndToEnd", "Failed", total.ElapsedMilliseconds);
-                throw;
+                AudioPerformanceLog.Write(_logger, audioRecordId, "Compression", correlationId, "EndToEnd", "Failed", total.ElapsedMilliseconds);
             }
             finally
             {

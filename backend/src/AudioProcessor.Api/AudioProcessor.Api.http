@@ -1,6 +1,15 @@
-@AudioProcessor.Api_HostAddress = http://localhost:5196
+POST {{AudioProcessor.Api_HostAddress}}/api/audio/upload
+Content-Type: multipart/form-data; boundary=----OdeoIABoundary
 
-GET {{AudioProcessor.Api_HostAddress}}/weatherforecast/
+------OdeoIABoundary
+Content-Disposition: form-data; name="file"; filename="03-01-01-01-01-02-01.wav"
+Content-Type: audio/mpeg
+
+< ../../../audios/03-01-01-01-01-02-01.wav
+------OdeoIABoundary--
+
+### Poll processing status — replace {id} with the value returned above.
+GET {{AudioProcessor.Api_HostAddress}}/api/audio/{89ee198d-4261-444b-a99d-83bc565791c9}
 Accept: application/json
 
 ###

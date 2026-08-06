@@ -6,7 +6,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using AudioProcessor.Application.Interfaces;
 using AudioProcessor.Application.UseCases;
-using AudioProcessor.Application.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,29 +13,28 @@ namespace AudioProcessor.Api.Controllers
 {
     /// <summary>
     /// Handles incoming HTTP requests for audio processing.
-    /// Exposes endpoints for uploading raw audio files and enqueuing them for asynchronous background compression.
+    /// Exposes endpoints for uploading raw audio files and launching their background processing flows.
     /// </summary>
     [ApiController]
     [Route("api/audio")]
     public class AudioController : ControllerBase
     {
         private readonly UploadAudioUseCase _uploadAudioUseCase;
-        private readonly IBackgroundJobQueue _backgroundJobQueue;
+        private readonly IAudioProcessingLauncher _audioProcessingLauncher;
         private readonly IAudioRepository _audioRepository;
 
         private static readonly string[] AllowedExtensions = { ".mp3", ".wav" };
-        private static readonly string[] AllowedContentTypes = { "audio/mpeg", "audio/wav", "audio/wave", "audio/x-wav" };
 
-        public AudioController(UploadAudioUseCase uploadAudioUseCase, IBackgroundJobQueue backgroundJobQueue, IAudioRepository audioRepository)
+        public AudioController(UploadAudioUseCase uploadAudioUseCase, IAudioProcessingLauncher audioProcessingLauncher, IAudioRepository audioRepository)
         {
             _uploadAudioUseCase = uploadAudioUseCase ?? throw new ArgumentNullException(nameof(uploadAudioUseCase));
-            _backgroundJobQueue = backgroundJobQueue ?? throw new ArgumentNullException(nameof(backgroundJobQueue));
+            _audioProcessingLauncher = audioProcessingLauncher ?? throw new ArgumentNullException(nameof(audioProcessingLauncher));
             _audioRepository = audioRepository ?? throw new ArgumentNullException(nameof(audioRepository));
         }
 
         /// <summary>
-        /// Uploads an audio file (.mp3 or .wav) to Supabase storage, records its metadata in the database, 
-        /// enqueues it for asynchronous background compression, and returns immediately.
+        /// Uploads an audio file (.mp3 or .wav) to Supabase storage, records its metadata in the database,
+        /// launches its two background processing flows, and returns immediately.
         /// </summary>
         [HttpPost("upload")]
         [ProducesResponseType(typeof(AudioUploadResponse), StatusCodes.Status202Accepted)]
@@ -62,11 +60,10 @@ namespace AudioProcessor.Api.Controllers
                 cancellationToken
             );
 
-            // 2. Enqueue the Guid of the audio record into the background worker channel queue
+            // 2. Launch the two independent processing flows (Compression, Transcription→Summary),
+            // one explicit Thread per flow, and return immediately — they update their own state.
             string correlationId = HttpContext.TraceIdentifier;
-            DateTimeOffset enqueuedAtUtc = DateTimeOffset.UtcNow;
-            await _backgroundJobQueue.EnqueueJobAsync(new AudioProcessingJob(audioRecord.Id, AudioProcessingJobType.Compression, correlationId, enqueuedAtUtc), cancellationToken);
-            await _backgroundJobQueue.EnqueueJobAsync(new AudioProcessingJob(audioRecord.Id, AudioProcessingJobType.Summary, correlationId, enqueuedAtUtc), cancellationToken);
+            _audioProcessingLauncher.LaunchProcessing(audioRecord.Id, correlationId);
 
             var response = new AudioUploadResponse(
                 audioRecord.Id,
@@ -75,10 +72,14 @@ namespace AudioProcessor.Api.Controllers
                 audioRecord.Status.ToString(),
                 audioRecord.CreatedAt);
 
-            // 3. Return HTTP 202 Accepted to signal that processing has been queued
+            // 3. Return HTTP 202 Accepted to signal that background processing has started
             return Accepted(response);
         }
 
+        /// <summary>
+        /// Returns per-stage status plus <see cref="AudioProcessingStatusResponse.OverallStatus"/> —
+        /// never Failed, used only by the frontend to decide when to stop polling.
+        /// </summary>
         [HttpGet("{id:guid}")]
         [ProducesResponseType(typeof(AudioProcessingStatusResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -91,14 +92,28 @@ namespace AudioProcessor.Api.Controllers
             return Ok(new AudioProcessingStatusResponse(
                 record.Id,
                 record.FileName,
+                record.OverallStatus.ToString(),
                 record.Status.ToString(),
                 record.CompressedStorageUrl,
+                record.TranscriptionStatus.ToString(),
+                record.TranscriptionError,
                 record.SummaryStatus.ToString(),
-                record.Summary,
+                record.SummaryStorageUrl,
                 record.SummaryError));
         }
     }
 
     public record AudioUploadResponse(Guid Id, string FileName, string StorageUrl, string Status, DateTime CreatedAt);
-    public record AudioProcessingStatusResponse(Guid Id, string FileName, string CompressionStatus, string? CompressedStorageUrl, string SummaryStatus, string? Summary, string? SummaryError);
+
+    public record AudioProcessingStatusResponse(
+        Guid Id,
+        string FileName,
+        string OverallStatus,
+        string CompressionStatus,
+        string? CompressedStorageUrl,
+        string TranscriptionStatus,
+        string? TranscriptionError,
+        string SummaryStatus,
+        string? SummaryStorageUrl,
+        string? SummaryError);
 }

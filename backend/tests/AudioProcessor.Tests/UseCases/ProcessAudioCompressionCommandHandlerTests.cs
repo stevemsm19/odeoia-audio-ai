@@ -105,7 +105,7 @@ namespace AudioProcessor.Tests.UseCases
         }
 
         [Fact]
-        public async Task HandleAsync_CompressionFails_UpdatesRecordToFailedAndPropagatesException()
+        public async Task HandleAsync_CompressionFails_UpdatesRecordToFailedWithoutThrowing()
         {
             // Arrange
             var recordId = Guid.NewGuid();
@@ -143,8 +143,10 @@ namespace AudioProcessor.Tests.UseCases
                 .Setup(r => r.UpdateAudioRecordAsync(It.IsAny<AudioRecord>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
-            // Act & Assert
-            await Assert.ThrowsAsync<InvalidOperationException>(() => _handler.HandleAsync(recordId));
+            // Act — the handler fully handles and persists the failure itself; it must not
+            // rethrow, otherwise AudioProcessingLauncher's outer catch would log the same
+            // failure a second time.
+            await _handler.HandleAsync(recordId);
 
             // Verify status was transitioned to Failed
             Assert.Equal(AudioProcessingStatus.Failed, originalRecord.Status);

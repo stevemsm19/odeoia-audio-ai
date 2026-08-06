@@ -1,15 +1,14 @@
 using System;
 using System.IO;
+using System.Threading;
 using AudioProcessor.Application.Interfaces;
 using AudioProcessor.Application.UseCases;
 using AudioProcessor.Infrastructure.Persistence;
 using AudioProcessor.Infrastructure.Persistence.Repositories;
 using AudioProcessor.Infrastructure.Storage;
-using AudioProcessor.Infrastructure.Queue;
 using AudioProcessor.Infrastructure.Services;
 using AudioProcessor.Infrastructure.ExternalServices;
 using Microsoft.Extensions.Options;
-using AudioProcessor.Api.BackgroundServices;
 using AppSupabaseOptions = AudioProcessor.Infrastructure.ExternalServices.SupabaseOptions;
 using DotNetEnv;
 using Microsoft.AspNetCore.Builder;
@@ -90,16 +89,22 @@ builder.Services.AddScoped<IAudioRepository, AudioRepository>();
 builder.Services.AddScoped<IAudioStorageService, SupabaseStorageService>();
 builder.Services.AddScoped<IAudioCompressionService, FFmpegAudioCompressionService>();
 builder.Services.Configure<LocalModelWorkerOptions>(builder.Configuration.GetSection(LocalModelWorkerOptions.SectionName));
-builder.Services.AddSingleton<IAudioSummaryService, LocalWhisperCppSummaryService>();
+builder.Services.AddScoped<IAudioTranscriptionService, LocalWhisperCppTranscriptionService>();
+builder.Services.AddScoped<IAudioSummarizationService, LocalLlamaCppSummarizationService>();
 builder.Services.AddScoped<UploadAudioUseCase>();
 builder.Services.AddScoped<ProcessAudioCompressionCommandHandler>();
 builder.Services.AddScoped<ProcessAudioSummaryCommandHandler>();
 
-// Register Singleton Background Queue
-builder.Services.AddSingleton<IBackgroundJobQueue, ChannelBackgroundJobQueue>();
+// Single shared semaphore limiting concurrent heavy external processes (FFmpeg, STT, LLM).
+builder.Services.Configure<ExternalProcessSemaphoreOptions>(builder.Configuration.GetSection(ExternalProcessSemaphoreOptions.SectionName));
+builder.Services.AddSingleton(provider =>
+{
+    int limit = provider.GetRequiredService<IOptions<ExternalProcessSemaphoreOptions>>().Value.MaxConcurrentProcesses;
+    return new SemaphoreSlim(Math.Max(1, limit));
+});
 
-// Register Background Worker
-builder.Services.AddHostedService<AudioProcessingBackgroundService>();
+// Launches an explicit Thread per flow, per audio (no queue, no Task.Run/Parallel.*).
+builder.Services.AddScoped<IAudioProcessingLauncher, AudioProcessingLauncher>();
 
 // Register HttpClient for Use Case
 builder.Services.AddHttpClient();

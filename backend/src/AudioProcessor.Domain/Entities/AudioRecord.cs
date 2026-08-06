@@ -1,6 +1,5 @@
 using System;
 using AudioProcessor.Domain.Enums;
-using System.Globalization;
 
 namespace AudioProcessor.Domain.Entities
 {
@@ -10,13 +9,46 @@ namespace AudioProcessor.Domain.Entities
         public string StorageUrl { get; private set; }
         public string FileName { get; private set; }
         public DateTime CreatedAt { get; private set; }
+
+        // Flujo 1 (Compression) — columns owned exclusively by this flow.
         public string? CompressedStorageUrl { get; private set; }
         public AudioProcessingStatus Status { get; private set; }
         public long? CompressionDurationMs { get; private set; }
-        public string? Summary { get; private set; }
+
+        // Flujo 2, stage 1 (Transcription) — never persists the transcript itself,
+        // only its outcome.
+        public AudioTranscriptionStatus TranscriptionStatus { get; private set; }
+        public long? TranscriptionDurationMs { get; private set; }
+        public string? TranscriptionError { get; private set; }
+
+        // Flujo 2, stage 2 (Summary) — stored as a Storage URL, not as text.
+        public string? SummaryStorageUrl { get; private set; }
         public AudioSummaryStatus SummaryStatus { get; private set; }
         public long? SummaryDurationMs { get; private set; }
         public string? SummaryError { get; private set; }
+
+        /// <summary>
+        /// Computed, not stored. "Completed" means the three stages reached a
+        /// terminal state — it is not a success verdict.
+        /// </summary>
+        public AudioOverallStatus OverallStatus
+        {
+            get
+            {
+                bool compressionTerminal = Status is AudioProcessingStatus.Completed or AudioProcessingStatus.Failed;
+                bool transcriptionTerminal = TranscriptionStatus is AudioTranscriptionStatus.Completed or AudioTranscriptionStatus.Failed;
+                bool summaryTerminal = SummaryStatus is AudioSummaryStatus.Completed or AudioSummaryStatus.Failed;
+
+                if (compressionTerminal && transcriptionTerminal && summaryTerminal)
+                    return AudioOverallStatus.Completed;
+
+                bool anyStageStarted = Status != AudioProcessingStatus.Pending
+                    || TranscriptionStatus != AudioTranscriptionStatus.Pending
+                    || SummaryStatus != AudioSummaryStatus.Pending;
+
+                return anyStageStarted ? AudioOverallStatus.Processing : AudioOverallStatus.Pending;
+            }
+        }
 
         private AudioRecord()
         {
@@ -42,7 +74,10 @@ namespace AudioProcessor.Domain.Entities
             Status = AudioProcessingStatus.Pending;
             CompressedStorageUrl = null;
             CompressionDurationMs = null;
-            Summary = null;
+            TranscriptionStatus = AudioTranscriptionStatus.Pending;
+            TranscriptionDurationMs = null;
+            TranscriptionError = null;
+            SummaryStorageUrl = null;
             SummaryStatus = AudioSummaryStatus.Pending;
             SummaryDurationMs = null;
             SummaryError = null;
@@ -75,6 +110,35 @@ namespace AudioProcessor.Domain.Entities
             Status = AudioProcessingStatus.Failed;
         }
 
+        public void MarkTranscriptionAsProcessing()
+        {
+            if (TranscriptionStatus == AudioTranscriptionStatus.Completed)
+                return;
+
+            TranscriptionStatus = AudioTranscriptionStatus.Processing;
+            TranscriptionError = null;
+        }
+
+        public void MarkTranscriptionAsCompleted(long durationMs)
+        {
+            if (durationMs < 0)
+                throw new ArgumentOutOfRangeException(nameof(durationMs));
+
+            TranscriptionDurationMs = durationMs;
+            TranscriptionError = null;
+            TranscriptionStatus = AudioTranscriptionStatus.Completed;
+        }
+
+        public void MarkTranscriptionAsFailed(string error, long durationMs)
+        {
+            if (durationMs < 0)
+                throw new ArgumentOutOfRangeException(nameof(durationMs));
+
+            TranscriptionDurationMs = durationMs;
+            TranscriptionError = string.IsNullOrWhiteSpace(error) ? "Transcription failed." : error[..Math.Min(error.Length, 1000)];
+            TranscriptionStatus = AudioTranscriptionStatus.Failed;
+        }
+
         public void MarkSummaryAsProcessing()
         {
             if (SummaryStatus == AudioSummaryStatus.Completed)
@@ -84,12 +148,15 @@ namespace AudioProcessor.Domain.Entities
             SummaryError = null;
         }
 
-        public void MarkSummaryAsCompleted(string summary, long durationMs)
+        public void MarkSummaryAsCompleted(string summaryStorageUrl, long durationMs)
         {
+            if (string.IsNullOrWhiteSpace(summaryStorageUrl))
+                throw new ArgumentException("Summary storage URL cannot be empty.", nameof(summaryStorageUrl));
+
             if (durationMs < 0)
                 throw new ArgumentOutOfRangeException(nameof(durationMs));
 
-            Summary = LimitSummaryLength(summary);
+            SummaryStorageUrl = summaryStorageUrl;
             SummaryDurationMs = durationMs;
             SummaryError = null;
             SummaryStatus = AudioSummaryStatus.Completed;
@@ -103,25 +170,6 @@ namespace AudioProcessor.Domain.Entities
             SummaryDurationMs = durationMs;
             SummaryError = string.IsNullOrWhiteSpace(error) ? "Summary generation failed." : error[..Math.Min(error.Length, 1000)];
             SummaryStatus = AudioSummaryStatus.Failed;
-        }
-
-        private static string LimitSummaryLength(string summary)
-        {
-            string normalized = string.Join(" ", (summary ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
-            if (string.IsNullOrWhiteSpace(normalized))
-                return "No speech detected";
-
-            int[] elements = StringInfo.ParseCombiningCharacters(normalized);
-            if (elements.Length <= 500)
-                return normalized;
-
-            int take = 499;
-            string candidate = normalized[..elements[take]].TrimEnd();
-            int wordBoundary = candidate.LastIndexOf(' ');
-            if (wordBoundary > 15)
-                candidate = candidate[..wordBoundary];
-
-            return candidate + "…";
         }
     }
 }

@@ -8,6 +8,10 @@ stages:
   - build
   - test
 
+# Keep this changes: list in sync with the shell `case` classification in
+# scripts/git-hooks/pre-push — GitLab's `rules: changes:` is evaluated
+# statically by the runner, so it can't delegate to a shared script the way
+# the actual validation commands do via Make (AGENTS.md section 12).
 .backend-rules: &backend-rules
   rules:
     - changes:
@@ -27,6 +31,7 @@ stages:
         - .gitignore
         - infrastructure/**/*
         - scripts/**/*
+        - AGENTS.md
 
 .dotnet-job: &dotnet-job
   image: mcr.microsoft.com/dotnet/sdk:8.0
@@ -52,24 +57,26 @@ backend-test:
   stage: test
   script: ["make backend-test"]
 
-frontend-lint:
+.node-job: &node-job
   image: node:24-alpine
-  <<: *frontend-rules
-  stage: lint
   cache:
     key: "$CI_COMMIT_REF_SLUG-frontend"
     paths: [frontend/.npm/]
   before_script:
+    - apk add --no-cache make
     - npm ci --prefix frontend --cache frontend/.npm
-  script: ["npm run lint --prefix frontend"]
+
+frontend-lint:
+  <<: [*node-job, *frontend-rules]
+  stage: lint
+  script: ["make frontend-lint"]
 
 frontend-build:
-  image: node:24-alpine
-  <<: *frontend-rules
+  <<: [*node-job, *frontend-rules]
   stage: build
-  cache:
-    key: "$CI_COMMIT_REF_SLUG-frontend"
-    paths: [frontend/.npm/]
-  before_script:
-    - npm ci --prefix frontend --cache frontend/.npm
-  script: ["npm run build --prefix frontend"]
+  script: ["make frontend-build"]
+
+frontend-test:
+  <<: [*node-job, *frontend-rules]
+  stage: test
+  script: ["make frontend-test"]

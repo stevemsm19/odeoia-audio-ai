@@ -17,7 +17,7 @@ namespace AudioProcessor.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.12")
+                .HasAnnotation("ProductVersion", "8.0.8")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -60,11 +60,6 @@ namespace AudioProcessor.Infrastructure.Migrations
                         .HasColumnType("character varying(2048)")
                         .HasColumnName("storage_url");
 
-                    b.Property<string>("Summary")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("summary");
-
                     b.Property<long?>("SummaryDurationMs")
                         .HasColumnType("bigint")
                         .HasColumnName("summary_duration_ms");
@@ -79,6 +74,26 @@ namespace AudioProcessor.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
                         .HasColumnName("summary_status");
+
+                    b.Property<string>("SummaryStorageUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("summary_storage_url");
+
+                    b.Property<long?>("TranscriptionDurationMs")
+                        .HasColumnType("bigint")
+                        .HasColumnName("transcription_duration_ms");
+
+                    b.Property<string>("TranscriptionError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("transcription_error");
+
+                    b.Property<string>("TranscriptionStatus")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("transcription_status");
 
                     b.HasKey("Id");
 

@@ -3,6 +3,8 @@
 .vscode
 **/bin
 **/obj
+**/node_modules
+**/dist
 models
 audios
 excercises
