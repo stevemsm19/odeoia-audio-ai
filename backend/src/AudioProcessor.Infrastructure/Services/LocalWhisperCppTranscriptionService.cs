@@ -69,7 +69,6 @@ namespace AudioProcessor.Infrastructure.Services
                 if (response is null || string.IsNullOrWhiteSpace(response.Transcript))
                     throw new InvalidOperationException("Local transcription worker returned no transcript.");
 
-                _logger.LogInformation("Local transcription completed for {FileName} in {ElapsedMs} ms", sourceFileName, response.ElapsedMilliseconds);
                 return new AudioTranscriptionResult(response.Transcript, response.ElapsedMilliseconds);
             }
             finally
@@ -81,8 +80,7 @@ namespace AudioProcessor.Infrastructure.Services
 
         private async Task<string> RunWorkerProcessAsync(ProcessStartInfo startInfo, string workerName, CancellationToken cancellationToken)
         {
-            // Deliberately blocking: runs on its own explicit Thread, not ordinary async I/O.
-            _externalProcessSemaphore.Wait(cancellationToken);
+            await _externalProcessSemaphore.WaitAsync(cancellationToken);
             try
             {
                 using var process = new Process { StartInfo = startInfo };
@@ -92,20 +90,23 @@ namespace AudioProcessor.Infrastructure.Services
                 Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
                 Task<string> stderrTask = process.StandardError.ReadToEndAsync();
 
-                using var cancellationRegistration = cancellationToken.Register(() =>
+                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(1, _options.TimeoutSeconds)));
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+
+                try
+                {
+                    await process.WaitForExitAsync(linkedCts.Token);
+                }
+                catch (OperationCanceledException)
                 {
                     if (!process.HasExited)
                         process.Kill(entireProcessTree: true);
-                });
 
-                bool exited = process.WaitForExit(TimeSpan.FromSeconds(Math.Max(1, _options.TimeoutSeconds)));
-                if (!exited)
-                {
-                    process.Kill(entireProcessTree: true);
+                    if (cancellationToken.IsCancellationRequested)
+                        throw;
+
                     throw new TimeoutException($"Local {workerName} worker timed out after {_options.TimeoutSeconds}s.");
                 }
-
-                cancellationToken.ThrowIfCancellationRequested();
 
                 string stdout = await stdoutTask;
                 string stderr = await stderrTask;

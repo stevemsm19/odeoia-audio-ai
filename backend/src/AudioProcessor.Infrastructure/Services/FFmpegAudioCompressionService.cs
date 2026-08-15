@@ -51,8 +51,7 @@ namespace AudioProcessor.Infrastructure.Services
                     await sourceStream.CopyToAsync(fileStream, cancellationToken);
                 }
 
-                // Deliberately blocking: runs on its own explicit Thread, not ordinary async I/O.
-                RunFFmpegProcess(tempInputPath, tempOutputPath, cancellationToken);
+                await RunFFmpegProcessAsync(tempInputPath, tempOutputPath, cancellationToken);
 
                 var memoryStream = new MemoryStream();
                 using (var fileStream = new FileStream(tempOutputPath, FileMode.Open, FileAccess.Read, FileShare.Read))
@@ -71,7 +70,7 @@ namespace AudioProcessor.Infrastructure.Services
             }
         }
 
-        private void RunFFmpegProcess(string inputPath, string outputPath, CancellationToken cancellationToken)
+        private async Task RunFFmpegProcessAsync(string inputPath, string outputPath, CancellationToken cancellationToken)
         {
             var startInfo = new ProcessStartInfo
             {
@@ -87,7 +86,7 @@ namespace AudioProcessor.Infrastructure.Services
                 CreateNoWindow = true
             };
 
-            _externalProcessSemaphore.Wait(cancellationToken);
+            await _externalProcessSemaphore.WaitAsync(cancellationToken);
             try
             {
                 using var process = new Process { StartInfo = startInfo };
@@ -111,7 +110,11 @@ namespace AudioProcessor.Infrastructure.Services
                 process.BeginErrorReadLine();
                 process.BeginOutputReadLine();
 
-                using var cancellationRegistration = cancellationToken.Register(() =>
+                try
+                {
+                    await process.WaitForExitAsync(cancellationToken);
+                }
+                catch (OperationCanceledException)
                 {
                     _logger.LogWarning("Audio compression cancelled. Terminating FFmpeg process...");
                     try
@@ -125,10 +128,8 @@ namespace AudioProcessor.Infrastructure.Services
                     {
                         _logger.LogError(ex, "Failed to terminate FFmpeg process tree during cancellation.");
                     }
-                });
-
-                process.WaitForExit();
-                cancellationToken.ThrowIfCancellationRequested();
+                    throw;
+                }
 
                 if (process.ExitCode != 0)
                 {

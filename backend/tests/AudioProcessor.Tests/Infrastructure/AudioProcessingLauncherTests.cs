@@ -1,53 +1,30 @@
 using System;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Threading;
+using System.Threading.Tasks;
+using AudioProcessor.Application.Interfaces;
+using AudioProcessor.Application.UseCases;
+using AudioProcessor.Domain.Entities;
+using AudioProcessor.Domain.Enums;
 using AudioProcessor.Infrastructure.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Moq.Protected;
 using Xunit;
 
 namespace AudioProcessor.Tests.Infrastructure
 {
-    /// <summary>
-    /// An exception outside a handler's own try/catch — for example, during DI
-    /// scope creation — must be contained by AudioProcessingLauncher's outer
-    /// try/catch, not crash the process.
-    /// </summary>
     public class AudioProcessingLauncherTests
     {
-        [Fact]
-        public void LaunchProcessing_WhenScopeCreationThrows_DoesNotThrowSynchronously_AndLogsTheFailure()
-        {
-            var mockScopeFactory = new Mock<IServiceScopeFactory>();
-            mockScopeFactory
-                .Setup(f => f.CreateScope())
-                .Throws(new InvalidOperationException("Simulated failure before the handler's own try/catch ever runs."));
-
-            var mockLogger = new Mock<ILogger<AudioProcessingLauncher>>();
-            var launcher = new AudioProcessingLauncher(mockScopeFactory.Object, mockLogger.Object);
-
-            var audioRecordId = Guid.NewGuid();
-
-            // Must return immediately without throwing — the Threads it starts run
-            // independently, and any failure inside them must never reach the caller
-            // (which, in production, is an HTTP request thread).
-            var exception = Record.Exception(() => launcher.LaunchProcessing(audioRecordId, "corr-r8"));
-            Assert.Null(exception);
-
-            // The background Threads run asynchronously; poll briefly for both of
-            // them (Compression and Transcription+Summary) to have logged the error
-            // instead of crashing the process.
-            bool bothFlowsLogged = WaitUntil(() => CountErrorLogs(mockLogger) >= 2, TimeSpan.FromSeconds(2));
-            Assert.True(bothFlowsLogged, "Expected both flow Threads to log the contained exception via ILogger.");
-        }
-
-        private static int CountErrorLogs(Mock<ILogger<AudioProcessingLauncher>> mockLogger)
-        {
-            return mockLogger.Invocations.Count(invocation =>
-                invocation.Method.Name == nameof(ILogger.Log)
-                && invocation.Arguments.Count > 0
-                && invocation.Arguments[0] is LogLevel.Error);
-        }
+        private static AudioRecord NewRecord() => new(
+            id: Guid.NewGuid(),
+            storageUrl: "https://example.supabase.co/audio-files/original.mp3",
+            fileName: "original.mp3",
+            createdAt: DateTime.UtcNow);
 
         private static bool WaitUntil(Func<bool> condition, TimeSpan timeout)
         {
@@ -59,6 +36,119 @@ namespace AudioProcessor.Tests.Infrastructure
                 Thread.Sleep(20);
             }
             return condition();
+        }
+
+        /// <summary>
+        /// An exception outside every handler's own try/catch — here, simulated by
+        /// DI scope creation failing before the shared download can even run — must
+        /// be contained and logged, not left to crash the process or vanish silently.
+        /// With Task instead of a raw Thread, an uncaught exception can no longer
+        /// crash the process on its own; what still matters is that it's actually
+        /// observed (logged) rather than swallowed as an unobserved Task exception.
+        /// </summary>
+        [Fact]
+        public void LaunchProcessing_WhenScopeCreationThrows_DoesNotThrowSynchronously_AndLogsTheFailure()
+        {
+            var mockScopeFactory = new Mock<IServiceScopeFactory>();
+            mockScopeFactory
+                .Setup(f => f.CreateScope())
+                .Throws(new InvalidOperationException("Simulated failure before any handler ever runs."));
+
+            var mockLogger = new Mock<ILogger<AudioProcessingLauncher>>();
+            var launcher = new AudioProcessingLauncher(mockScopeFactory.Object, mockLogger.Object);
+
+            var audioRecordId = Guid.NewGuid();
+
+            // Must return immediately without throwing — the background work it
+            // starts runs independently, and any failure inside it must never reach
+            // the caller (which, in production, is an HTTP request thread).
+            var exception = Record.Exception(() => launcher.LaunchProcessing(audioRecordId, "corr-r8"));
+            Assert.Null(exception);
+
+            bool loggedTheFailure = WaitUntil(() => CountErrorLogs(mockLogger) >= 1, TimeSpan.FromSeconds(2));
+            Assert.True(loggedTheFailure, "Expected the contained exception to be logged via ILogger instead of being silently lost.");
+        }
+
+        /// <summary>
+        /// End-to-end through a real DI container (not mocked IServiceScope chains):
+        /// verifies the two flows actually run as independent Tasks and reach
+        /// Completed, and that the original audio is downloaded exactly once and
+        /// shared between them rather than each flow re-downloading it.
+        /// </summary>
+        [Fact]
+        public async Task LaunchProcessing_DownloadsOriginalAudioOnce_AndCompletesBothFlowsConcurrently()
+        {
+            var record = NewRecord();
+
+            var mockAudioRepository = new Mock<IAudioRepository>();
+            mockAudioRepository.Setup(r => r.GetByIdAsync(record.Id, It.IsAny<CancellationToken>())).ReturnsAsync(record);
+            mockAudioRepository.Setup(r => r.UpdateAudioRecordAsync(It.IsAny<AudioRecord>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+
+            var mockHttpMessageHandler = new Mock<HttpMessageHandler>();
+            mockHttpMessageHandler
+                .Protected()
+                .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+                .ReturnsAsync(() => new HttpResponseMessage
+                {
+                    StatusCode = HttpStatusCode.OK,
+                    Content = new StreamContent(new MemoryStream(new byte[] { 1, 2, 3, 4, 5 }))
+                });
+
+            var mockCompressionService = new Mock<IAudioCompressionService>();
+            mockCompressionService
+                .Setup(c => c.CompressToAacAsync(It.IsAny<Stream>(), record.FileName, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new MemoryStream(new byte[] { 9, 9, 9 }));
+
+            var mockTranscriptionService = new Mock<IAudioTranscriptionService>();
+            mockTranscriptionService
+                .Setup(s => s.TranscribeAsync(It.IsAny<Stream>(), record.FileName, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new AudioTranscriptionResult("hello world", 10));
+
+            var mockSummarizationService = new Mock<IAudioSummarizationService>();
+            mockSummarizationService
+                .Setup(s => s.SummarizeAsync("hello world", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new AudioSummarizationResult("a short summary", 10));
+
+            var mockStorageService = new Mock<IAudioStorageService>();
+            mockStorageService
+                .Setup(s => s.UploadAudioAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<string>(), record.Id, It.IsAny<CancellationToken>()))
+                .ReturnsAsync("https://example.supabase.co/audio-files/result");
+
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.AddSingleton(mockAudioRepository.Object);
+            services.AddSingleton(new HttpClient(mockHttpMessageHandler.Object));
+            services.AddSingleton(mockCompressionService.Object);
+            services.AddSingleton(mockTranscriptionService.Object);
+            services.AddSingleton(mockSummarizationService.Object);
+            services.AddSingleton(mockStorageService.Object);
+            services.AddScoped<ProcessAudioCompressionCommandHandler>();
+            services.AddScoped<ProcessAudioSummaryCommandHandler>();
+
+            using var provider = services.BuildServiceProvider();
+            var launcher = new AudioProcessingLauncher(
+                provider.GetRequiredService<IServiceScopeFactory>(),
+                provider.GetRequiredService<ILogger<AudioProcessingLauncher>>());
+
+            launcher.LaunchProcessing(record.Id, "corr-shared-download");
+
+            bool bothCompleted = WaitUntil(
+                () => record.Status == AudioProcessingStatus.Completed && record.SummaryStatus == AudioSummaryStatus.Completed,
+                TimeSpan.FromSeconds(5));
+
+            Assert.True(bothCompleted, $"Expected both flows to complete. Compression={record.Status}, Summary={record.SummaryStatus}");
+
+            mockHttpMessageHandler
+                .Protected()
+                .Verify("SendAsync", Times.Once(), ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>());
+        }
+
+        private static int CountErrorLogs(Mock<ILogger<AudioProcessingLauncher>> mockLogger)
+        {
+            return mockLogger.Invocations.Count(invocation =>
+                invocation.Method.Name == nameof(ILogger.Log)
+                && invocation.Arguments.Count > 0
+                && invocation.Arguments[0] is LogLevel.Error);
         }
     }
 }

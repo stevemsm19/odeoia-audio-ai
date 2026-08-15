@@ -96,17 +96,20 @@ builder.Services.AddScoped<ProcessAudioCompressionCommandHandler>();
 builder.Services.AddScoped<ProcessAudioSummaryCommandHandler>();
 
 // Single shared semaphore limiting concurrent heavy external processes (FFmpeg, STT, LLM).
-builder.Services.Configure<ExternalProcessSemaphoreOptions>(builder.Configuration.GetSection(ExternalProcessSemaphoreOptions.SectionName));
+// Read directly from an environment variable (not appsettings) so benchmark runs can
+// change the limit by restarting the container, without a rebuild.
 builder.Services.AddSingleton(provider =>
 {
-    int limit = provider.GetRequiredService<IOptions<ExternalProcessSemaphoreOptions>>().Value.MaxConcurrentProcesses;
+    string? rawLimit = Environment.GetEnvironmentVariable("EXTERNAL_PROCESS_SEMAPHORE_LIMIT");
+    int limit = int.TryParse(rawLimit, out var parsedLimit) ? parsedLimit : 2;
     return new SemaphoreSlim(Math.Max(1, limit));
 });
 
-// Launches an explicit Thread per flow, per audio (no queue, no Task.Run/Parallel.*).
+// Downloads the original audio once, then launches Compression and
+// Transcription→Summary as independent Tasks (Task.Run + Task.WhenAll).
 builder.Services.AddScoped<IAudioProcessingLauncher, AudioProcessingLauncher>();
 
-// Register HttpClient for Use Case
+// Register HttpClient, used by the launcher to download the original audio.
 builder.Services.AddHttpClient();
 
 builder.Services.AddControllers();

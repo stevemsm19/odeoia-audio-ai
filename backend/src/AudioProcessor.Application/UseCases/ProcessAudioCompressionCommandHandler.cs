@@ -1,7 +1,6 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using AudioProcessor.Application.Interfaces;
@@ -16,7 +15,7 @@ namespace AudioProcessor.Application.UseCases
 {
     /// <summary>
     /// Command handler responsible for executing the asynchronous audio compression workflow.
-    /// It streams the original audio from storage, runs compression, uploads the resulting AAC stream,
+    /// It compresses the original audio stream, uploads the resulting AAC stream,
     /// and updates the record status and execution duration in the persistent repository.
     /// </summary>
     public class ProcessAudioCompressionCommandHandler
@@ -24,32 +23,31 @@ namespace AudioProcessor.Application.UseCases
         private readonly IAudioRepository _audioRepository;
         private readonly IAudioStorageService _audioStorageService;
         private readonly IAudioCompressionService _audioCompressionService;
-        private readonly HttpClient _httpClient;
         private readonly ILogger<ProcessAudioCompressionCommandHandler> _logger;
 
         public ProcessAudioCompressionCommandHandler(
             IAudioRepository audioRepository,
             IAudioStorageService audioStorageService,
             IAudioCompressionService audioCompressionService,
-            HttpClient httpClient,
             ILogger<ProcessAudioCompressionCommandHandler> logger)
         {
             _audioRepository = audioRepository ?? throw new ArgumentNullException(nameof(audioRepository));
             _audioStorageService = audioStorageService ?? throw new ArgumentNullException(nameof(audioStorageService));
             _audioCompressionService = audioCompressionService ?? throw new ArgumentNullException(nameof(audioCompressionService));
-            _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         /// <summary>
-        /// Orchestrates the retrieval, compression, upload, and status transition of the specified audio record.
+        /// Orchestrates the compression, upload, and status transition of the specified audio record.
         /// </summary>
         /// <param name="audioRecordId">The unique identifier of the audio record to process.</param>
+        /// <param name="originalAudioStream">The original audio, already downloaded by the caller and shared with the other flow.</param>
+        /// <param name="correlationId">Identifier used to correlate performance log entries across both flows for the same request.</param>
         /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
         /// <remarks>
         /// Failures are fully handled here (logged, persisted as <c>Failed</c>) and never rethrown.
         /// </remarks>
-        public async Task HandleAsync(Guid audioRecordId, string correlationId = "none", CancellationToken cancellationToken = default)
+        public async Task HandleAsync(Guid audioRecordId, Stream originalAudioStream, string correlationId = "none", CancellationToken cancellationToken = default)
         {
             var total = Stopwatch.StartNew();
             _logger.LogInformation("Processing audio compression request for Record ID: {Id}", audioRecordId);
@@ -73,26 +71,15 @@ namespace AudioProcessor.Application.UseCases
             await _audioRepository.UpdateAudioRecordAsync(record, cancellationToken);
             AudioPerformanceLog.Write(_logger, audioRecordId, "Compression", correlationId, "DatabaseUpdate", "Completed", databaseUpdate.ElapsedMilliseconds);
 
-            Stream? originalStream = null;
             Stream? compressedStream = null;
 
             try
             {
-                _logger.LogInformation("Streaming original audio file from: {Url}", record.StorageUrl);
-
-                var download = Stopwatch.StartNew();
-                var response = await _httpClient.GetAsync(record.StorageUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-                response.EnsureSuccessStatusCode();
-
-                originalStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-                AudioPerformanceLog.Write(_logger, audioRecordId, "Compression", correlationId, "AudioDownload", "Completed", download.ElapsedMilliseconds);
-                _logger.LogInformation("Invoking audio compression service for {FileName}", record.FileName);
                 var compression = Stopwatch.StartNew();
-                compressedStream = await _audioCompressionService.CompressToAacAsync(originalStream, record.FileName, cancellationToken);
+                compressedStream = await _audioCompressionService.CompressToAacAsync(originalAudioStream, record.FileName, cancellationToken);
                 AudioPerformanceLog.Write(_logger, audioRecordId, "Compression", correlationId, "Compression", "Completed", compression.ElapsedMilliseconds);
 
                 string compressedFileName = Path.ChangeExtension(record.FileName, ".aac");
-                _logger.LogInformation("Uploading compressed audio to storage as {FileName}", compressedFileName);
 
                 var upload = Stopwatch.StartNew();
                 string compressedStorageUrl = await _audioStorageService.UploadAudioAsync(
@@ -133,10 +120,6 @@ namespace AudioProcessor.Application.UseCases
             }
             finally
             {
-                if (originalStream != null)
-                {
-                    await originalStream.DisposeAsync();
-                }
                 if (compressedStream != null)
                 {
                     await compressedStream.DisposeAsync();
