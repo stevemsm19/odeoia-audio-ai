@@ -20,9 +20,9 @@ namespace AudioProcessor.Tests.Infrastructure
             var releaseFirstHolder = new ManualResetEventSlim(false);
             var secondCallerAcquired = new ManualResetEventSlim(false);
 
-            var firstHolder = Task.Run(() =>
+            var firstHolder = Task.Run(async () =>
             {
-                semaphore.Wait();
+                await semaphore.WaitAsync();
                 firstHolderReady.Set();
                 releaseFirstHolder.Wait();
                 semaphore.Release();
@@ -30,9 +30,9 @@ namespace AudioProcessor.Tests.Infrastructure
 
             Assert.True(firstHolderReady.Wait(TimeSpan.FromSeconds(5)), "First holder never acquired the semaphore.");
 
-            var secondCaller = Task.Run(() =>
+            var secondCaller = Task.Run(async () =>
             {
-                semaphore.Wait();
+                await semaphore.WaitAsync();
                 secondCallerAcquired.Set();
                 semaphore.Release();
             });
@@ -59,9 +59,9 @@ namespace AudioProcessor.Tests.Infrastructure
             await semaphore.WaitAsync();
 
             var thirdAcquired = new ManualResetEventSlim(false);
-            var thirdCaller = Task.Run(() =>
+            var thirdCaller = Task.Run(async () =>
             {
-                semaphore.Wait();
+                await semaphore.WaitAsync();
                 thirdAcquired.Set();
                 semaphore.Release();
             });

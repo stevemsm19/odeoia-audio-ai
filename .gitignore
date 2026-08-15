@@ -28,6 +28,10 @@ Thumbs.db
 # Logs
 *.log
 
+# Benchmark run outputs (kept locally, not committed)
+infrastructure/benchmarks/results/*
+!infrastructure/benchmarks/results/.gitkeep
+
 # Project
 audios/
 models/

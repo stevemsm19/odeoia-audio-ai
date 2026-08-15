@@ -1,7 +1,6 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -24,7 +23,6 @@ namespace AudioProcessor.Application.UseCases
         private readonly IAudioTranscriptionService _transcriptionService;
         private readonly IAudioSummarizationService _summarizationService;
         private readonly IAudioStorageService _audioStorageService;
-        private readonly HttpClient _httpClient;
         private readonly ILogger<ProcessAudioSummaryCommandHandler> _logger;
 
         public ProcessAudioSummaryCommandHandler(
@@ -32,28 +30,30 @@ namespace AudioProcessor.Application.UseCases
             IAudioTranscriptionService transcriptionService,
             IAudioSummarizationService summarizationService,
             IAudioStorageService audioStorageService,
-            HttpClient httpClient,
             ILogger<ProcessAudioSummaryCommandHandler> logger)
         {
             _audioRepository = audioRepository;
             _transcriptionService = transcriptionService;
             _summarizationService = summarizationService;
             _audioStorageService = audioStorageService;
-            _httpClient = httpClient;
             _logger = logger;
         }
 
+        /// <param name="audioRecordId">The unique identifier of the audio record to process.</param>
+        /// <param name="originalAudioStream">The original audio, already downloaded by the caller and shared with the other flow.</param>
+        /// <param name="correlationId">Identifier used to correlate performance log entries across both flows for the same request.</param>
+        /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
         /// <remarks>
         /// Failures in either stage are fully handled here (logged, persisted as <c>Failed</c>) and never rethrown.
         /// </remarks>
-        public async Task HandleAsync(Guid audioRecordId, string correlationId, CancellationToken cancellationToken = default)
+        public async Task HandleAsync(Guid audioRecordId, Stream originalAudioStream, string correlationId, CancellationToken cancellationToken = default)
         {
             var total = Stopwatch.StartNew();
             var record = await _audioRepository.GetByIdAsync(audioRecordId, cancellationToken);
             if (record is null || record.SummaryStatus == AudioSummaryStatus.Completed)
                 return;
 
-            string? transcript = await RunTranscriptionAsync(record, correlationId, total, cancellationToken);
+            string? transcript = await RunTranscriptionAsync(record, originalAudioStream, correlationId, total, cancellationToken);
             if (transcript is null)
                 return;
 
@@ -62,7 +62,7 @@ namespace AudioProcessor.Application.UseCases
 
         /// <returns>The transcript, or <c>null</c> if transcription failed (already
         /// persisted as Failed for both Transcription and Summary — nothing left to do).</returns>
-        private async Task<string?> RunTranscriptionAsync(Domain.Entities.AudioRecord record, string correlationId, Stopwatch total, CancellationToken cancellationToken)
+        private async Task<string?> RunTranscriptionAsync(Domain.Entities.AudioRecord record, Stream originalAudioStream, string correlationId, Stopwatch total, CancellationToken cancellationToken)
         {
             var stageStopwatch = Stopwatch.StartNew();
             record.MarkTranscriptionAsProcessing();
@@ -72,13 +72,7 @@ namespace AudioProcessor.Application.UseCases
 
             try
             {
-                var download = Stopwatch.StartNew();
-                using var response = await _httpClient.GetAsync(record.StorageUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-                response.EnsureSuccessStatusCode();
-                await using var audioStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-                AudioPerformanceLog.Write(_logger, record.Id, "Transcription", correlationId, "AudioDownload", "Completed", download.ElapsedMilliseconds);
-
-                AudioTranscriptionResult result = await _transcriptionService.TranscribeAsync(audioStream, record.FileName, cancellationToken);
+                AudioTranscriptionResult result = await _transcriptionService.TranscribeAsync(originalAudioStream, record.FileName, cancellationToken);
                 AudioPerformanceLog.Write(_logger, record.Id, "Transcription", correlationId, "SpeechToText", "Completed", result.ElapsedMilliseconds);
 
                 stageStopwatch.Stop();

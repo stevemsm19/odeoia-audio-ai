@@ -5,7 +5,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using AudioProcessor.Application.Interfaces;
 using AudioProcessor.Infrastructure.ExternalServices;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace AudioProcessor.Infrastructure.Services
@@ -21,16 +20,13 @@ namespace AudioProcessor.Infrastructure.Services
 
         private readonly LocalModelWorkerOptions _options;
         private readonly SemaphoreSlim _externalProcessSemaphore;
-        private readonly ILogger<LocalLlamaCppSummarizationService> _logger;
 
         public LocalLlamaCppSummarizationService(
             IOptions<LocalModelWorkerOptions> options,
-            SemaphoreSlim externalProcessSemaphore,
-            ILogger<LocalLlamaCppSummarizationService> logger)
+            SemaphoreSlim externalProcessSemaphore)
         {
             _options = options.Value;
             _externalProcessSemaphore = externalProcessSemaphore;
-            _logger = logger;
         }
 
         public async Task<AudioSummarizationResult> SummarizeAsync(string transcript, CancellationToken cancellationToken = default)
@@ -56,14 +52,12 @@ namespace AudioProcessor.Infrastructure.Services
             if (response is null || string.IsNullOrWhiteSpace(response.Summary))
                 throw new InvalidOperationException("Local summarization worker returned no summary.");
 
-            _logger.LogInformation("Local summarization completed in {ElapsedMs} ms", response.ElapsedMilliseconds);
             return new AudioSummarizationResult(response.Summary, response.ElapsedMilliseconds);
         }
 
         private async Task<string> RunWorkerProcessAsync(ProcessStartInfo startInfo, string transcript, CancellationToken cancellationToken)
         {
-            // Deliberately blocking: runs on its own explicit Thread, not ordinary async I/O.
-            _externalProcessSemaphore.Wait(cancellationToken);
+            await _externalProcessSemaphore.WaitAsync(cancellationToken);
             try
             {
                 using var process = new Process { StartInfo = startInfo };
@@ -76,20 +70,23 @@ namespace AudioProcessor.Infrastructure.Services
                 Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
                 Task<string> stderrTask = process.StandardError.ReadToEndAsync();
 
-                using var cancellationRegistration = cancellationToken.Register(() =>
+                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(1, _options.TimeoutSeconds)));
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+
+                try
+                {
+                    await process.WaitForExitAsync(linkedCts.Token);
+                }
+                catch (OperationCanceledException)
                 {
                     if (!process.HasExited)
                         process.Kill(entireProcessTree: true);
-                });
 
-                bool exited = process.WaitForExit(TimeSpan.FromSeconds(Math.Max(1, _options.TimeoutSeconds)));
-                if (!exited)
-                {
-                    process.Kill(entireProcessTree: true);
+                    if (cancellationToken.IsCancellationRequested)
+                        throw;
+
                     throw new TimeoutException($"Local summarization worker timed out after {_options.TimeoutSeconds}s.");
                 }
-
-                cancellationToken.ThrowIfCancellationRequested();
 
                 string stdout = await stdoutTask;
                 string stderr = await stderrTask;
