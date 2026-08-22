@@ -105,12 +105,18 @@ builder.Services.AddSingleton(provider =>
     return new SemaphoreSlim(Math.Max(1, limit));
 });
 
-// Downloads the original audio once, then launches Compression and
+// Downloads the original audio once, then runs Compression and
 // Transcription→Summary as independent Tasks (Task.Run + Task.WhenAll).
 builder.Services.AddScoped<IAudioProcessingLauncher, AudioProcessingLauncher>();
 
 // Register HttpClient, used by the launcher to download the original audio.
 builder.Services.AddHttpClient();
+
+// Background admission control: polls for Pending audios and processes a
+// batch at a time with Parallel.ForEachAsync, bounding how many whole audios
+// run concurrently at the system level (distinct from the external-process
+// SemaphoreSlim above and from the per-audio Task.WhenAll in the launcher).
+builder.Services.AddHostedService<AudioBackgroundProcessingService>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

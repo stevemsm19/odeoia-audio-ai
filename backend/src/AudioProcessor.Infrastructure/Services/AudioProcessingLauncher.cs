@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 using AudioProcessor.Application.Interfaces;
 using AudioProcessor.Application.Logging;
@@ -12,11 +13,11 @@ using Microsoft.Extensions.Logging;
 namespace AudioProcessor.Infrastructure.Services
 {
     /// <summary>
-    /// Downloads the original audio once, then starts the two flows (Compression;
+    /// Downloads the original audio once, then runs the two flows (Compression;
     /// Transcription→Summary) as independent <see cref="Task"/>s via <c>Task.Run</c>,
     /// each with its own DI scope (EF Core's <c>DbContext</c> is not thread-safe to
-    /// share). Returns immediately — the flows run and update their own state
-    /// independently.
+    /// share). <see cref="ProcessAsync"/> completes only once both flows have reached
+    /// a terminal state.
     /// </summary>
     public class AudioProcessingLauncher : IAudioProcessingLauncher
     {
@@ -29,26 +30,23 @@ namespace AudioProcessor.Infrastructure.Services
             _logger = logger;
         }
 
-        public void LaunchProcessing(Guid audioRecordId, string correlationId)
-        {
-            _ = RunBothFlowsAsync(audioRecordId, correlationId);
-        }
-
-        private async Task RunBothFlowsAsync(Guid audioRecordId, string correlationId)
+        public async Task ProcessAsync(Guid audioRecordId, string correlationId, CancellationToken cancellationToken = default)
         {
             try
             {
-                byte[]? originalAudioBytes = await DownloadOriginalAudioAsync(audioRecordId, correlationId);
+                byte[]? originalAudioBytes = await DownloadOriginalAudioAsync(audioRecordId, correlationId, cancellationToken);
                 if (originalAudioBytes is null)
                     return;
 
                 Task compressionTask = Task.Run(() => RunFlowAsync<ProcessAudioCompressionCommandHandler>(
                     "Compression", audioRecordId, correlationId, originalAudioBytes,
-                    (handler, id, corrId, stream) => handler.HandleAsync(id, stream, corrId)));
+                    (handler, id, corrId, stream, ct) => handler.HandleAsync(id, stream, corrId, ct),
+                    cancellationToken));
 
                 Task summaryTask = Task.Run(() => RunFlowAsync<ProcessAudioSummaryCommandHandler>(
                     "Transcription+Summary", audioRecordId, correlationId, originalAudioBytes,
-                    (handler, id, corrId, stream) => handler.HandleAsync(id, stream, corrId)));
+                    (handler, id, corrId, stream, ct) => handler.HandleAsync(id, stream, corrId, ct),
+                    cancellationToken));
 
                 await Task.WhenAll(compressionTask, summaryTask);
             }
@@ -66,7 +64,7 @@ namespace AudioProcessor.Infrastructure.Services
         /// </summary>
         /// <returns>The audio bytes, or <c>null</c> if the record wasn't found or the
         /// download failed (in which case every stage is already persisted as Failed).</returns>
-        private async Task<byte[]?> DownloadOriginalAudioAsync(Guid audioRecordId, string correlationId)
+        private async Task<byte[]?> DownloadOriginalAudioAsync(Guid audioRecordId, string correlationId, CancellationToken cancellationToken)
         {
             var stopwatch = Stopwatch.StartNew();
             try
@@ -75,16 +73,16 @@ namespace AudioProcessor.Infrastructure.Services
                 var repository = scope.ServiceProvider.GetRequiredService<IAudioRepository>();
                 var httpClient = scope.ServiceProvider.GetRequiredService<HttpClient>();
 
-                var record = await repository.GetByIdAsync(audioRecordId);
+                var record = await repository.GetByIdAsync(audioRecordId, cancellationToken);
                 if (record is null)
                 {
                     _logger.LogError("Audio record with ID {Id} was not found in the database. Aborting processing.", audioRecordId);
                     return null;
                 }
 
-                using var response = await httpClient.GetAsync(record.StorageUrl, HttpCompletionOption.ResponseHeadersRead);
+                using var response = await httpClient.GetAsync(record.StorageUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
                 response.EnsureSuccessStatusCode();
-                byte[] bytes = await response.Content.ReadAsByteArrayAsync();
+                byte[] bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
 
                 AudioPerformanceLog.Write(_logger, audioRecordId, "Shared", correlationId, "AudioDownload", "Completed", stopwatch.ElapsedMilliseconds);
                 return bytes;
@@ -118,7 +116,8 @@ namespace AudioProcessor.Infrastructure.Services
             Guid audioRecordId,
             string correlationId,
             byte[] originalAudioBytes,
-            Func<THandler, Guid, string, Stream, Task> invoke)
+            Func<THandler, Guid, string, Stream, CancellationToken, Task> invoke,
+            CancellationToken cancellationToken)
             where THandler : notnull
         {
             // Must wrap the entire flow body: an uncaught exception here would only
@@ -129,7 +128,7 @@ namespace AudioProcessor.Infrastructure.Services
                 using var scope = _scopeFactory.CreateScope();
                 var handler = scope.ServiceProvider.GetRequiredService<THandler>();
                 using var originalStream = new MemoryStream(originalAudioBytes, writable: false);
-                await invoke(handler, audioRecordId, correlationId, originalStream);
+                await invoke(handler, audioRecordId, correlationId, originalStream, cancellationToken);
             }
             catch (Exception ex)
             {

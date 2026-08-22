@@ -27,11 +27,14 @@ namespace AudioProcessor.Tests.Controllers
                 OverallStatus: "Processing",
                 CompressionStatus: "Completed",
                 CompressedStorageUrl: "https://example.supabase.co/audio-files/audio.aac",
+                CompressionDurationMs: 1234,
                 TranscriptionStatus: "Completed",
                 TranscriptionError: null,
+                TranscriptionDurationMs: 2345,
                 SummaryStatus: "Processing",
                 SummaryStorageUrl: null,
-                SummaryError: null);
+                SummaryError: null,
+                SummaryDurationMs: null);
 
             string json = JsonSerializer.Serialize(response, AspNetCoreDefaultJsonOptions);
             using var document = JsonDocument.Parse(json);
@@ -43,11 +46,14 @@ namespace AudioProcessor.Tests.Controllers
             Assert.Equal("Processing", overallStatus.GetString());
             Assert.True(root.TryGetProperty("compressionStatus", out _));
             Assert.True(root.TryGetProperty("compressedStorageUrl", out _));
+            Assert.True(root.TryGetProperty("compressionDurationMs", out _));
             Assert.True(root.TryGetProperty("transcriptionStatus", out _));
             Assert.True(root.TryGetProperty("transcriptionError", out _));
+            Assert.True(root.TryGetProperty("transcriptionDurationMs", out _));
             Assert.True(root.TryGetProperty("summaryStatus", out _));
             Assert.True(root.TryGetProperty("summaryStorageUrl", out _));
             Assert.True(root.TryGetProperty("summaryError", out _));
+            Assert.True(root.TryGetProperty("summaryDurationMs", out _));
 
             // The old inline-text field must be gone — its replacement is summaryStorageUrl.
             Assert.False(root.TryGetProperty("summary", out _));

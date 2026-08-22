@@ -1,8 +1,12 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using AudioProcessor.Application.Interfaces;
 using AudioProcessor.Domain.Entities;
+using AudioProcessor.Domain.Enums;
+using Microsoft.EntityFrameworkCore;
 
 namespace AudioProcessor.Infrastructure.Persistence.Repositories
 {
@@ -39,6 +43,17 @@ namespace AudioProcessor.Infrastructure.Persistence.Repositories
             // Saving detected changes prevents a summary worker from overwriting fields
             // updated concurrently by a compression worker with stale values.
             await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public async Task<IReadOnlyList<AudioRecord>> GetPendingAudioRecordsAsync(CancellationToken cancellationToken = default)
+        {
+            return await _dbContext.AudioRecords
+                .Where(r => r.Status == AudioProcessingStatus.Pending
+                    && r.TranscriptionStatus == AudioTranscriptionStatus.Pending
+                    && r.SummaryStatus == AudioSummaryStatus.Pending)
+                .OrderBy(r => r.CreatedAt)
+                .ToListAsync(cancellationToken);
         }
     }
 }

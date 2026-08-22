@@ -9,7 +9,7 @@ Content-Type: audio/mpeg
 ------OdeoIABoundary--
 
 ### Poll processing status — replace {id} with the value returned above.
-GET {{AudioProcessor.Api_HostAddress}}/api/audio/{a773515b-f3c7-474c-b887-ddf63238adce}
+GET {{AudioProcessor.Api_HostAddress}}/api/audio/{36b953a3-ccbb-40d3-9cfb-3441b046e68b}
 Accept: application/json
 
 ###

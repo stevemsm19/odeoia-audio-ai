@@ -20,6 +20,17 @@ namespace AudioProcessor.Infrastructure.Storage
         private readonly string _bucketName;
         private readonly ILogger<SupabaseStorageService> _logger;
 
+        // The Supabase.Storage SDK (v1.4.0) is not safe for concurrent uploads from a shared client
+        // instance. StorageFileApi.UploadOrUpdate mutates a per-instance StorageHeader (a plain
+        // Dictionary<string,string>) without synchronization, and HttpClientProgress.UploadAsync
+        // calls client.DefaultRequestHeaders.Clear() followed by Add() on the shared HttpClient —
+        // also without any lock. Under concurrent uploads these unsynchronized writes corrupt the
+        // header state, which causes the NullReferenceException inside HttpConnection.WriteAsciiString.
+        // Serializing all SDK upload calls to one at a time eliminates that window.
+        // This semaphore is intentionally separate from the FFmpeg/STT/LLM one: that semaphore
+        // throttles heavy external OS processes; this one guards a specific SDK thread-safety boundary.
+        private static readonly SemaphoreSlim _supabaseUploadSemaphore = new(1, 1);
+
         public SupabaseStorageService(
             Client supabaseClient,
             IOptions<AppSupabaseOptions> options,
@@ -58,13 +69,24 @@ namespace AudioProcessor.Infrastructure.Storage
 
             string uniqueObjectPath = $"{folderId}/{fileName}";
 
-            await _supabaseClient.Storage
-                .From(_bucketName)
-                .Upload(fileBytes, uniqueObjectPath, new Supabase.Storage.FileOptions
-                {
-                    ContentType = contentType,
-                    Upsert = false
-                });
+            _logger.LogDebug("Waiting for Supabase upload semaphore for path {Path}", uniqueObjectPath);
+            await _supabaseUploadSemaphore.WaitAsync(cancellationToken);
+            try
+            {
+                _logger.LogDebug("Acquired Supabase upload semaphore for path {Path}", uniqueObjectPath);
+                await _supabaseClient.Storage
+                    .From(_bucketName)
+                    .Upload(fileBytes, uniqueObjectPath, new Supabase.Storage.FileOptions
+                    {
+                        ContentType = contentType,
+                        Upsert = false
+                    });
+            }
+            finally
+            {
+                _supabaseUploadSemaphore.Release();
+                _logger.LogDebug("Released Supabase upload semaphore for path {Path}", uniqueObjectPath);
+            }
 
             string publicUrl = _supabaseClient.Storage
                 .From(_bucketName)

@@ -12,7 +12,7 @@ GREEN := \033[32m
 RED := \033[31m
 NC := \033[0m
 
-.PHONY: help init init-docker setup-hooks download-models validate check backend-check backend-lint backend-build backend-test frontend-install frontend-dev frontend-lint frontend-build frontend-test frontend-check format lint build run migration db-update test reset-all docker-build docker-up docker-down
+.PHONY: help init init-docker setup-hooks download-models validate check backend-check backend-lint backend-build backend-test frontend-install frontend-dev frontend-lint frontend-build frontend-test frontend-check format lint build run migration db-update test reset-all docker-build docker-up docker-down benchmark
 
 help: ## Show available commands
 	@echo ""
@@ -117,3 +117,11 @@ docker-up: ## Start development containers
 docker-down: ## Stop development containers
 	@echo "$(RED)Stopping development containers...$(NC)"
 	cd $(INFRASTRUCTURE_DIR) && docker compose down
+
+benchmark: ## Run a k6 upload benchmark (example: make benchmark LABEL=tpl-sem3-vu20 VUS=20)
+	@if [ -z "$(LABEL)" ] || [ -z "$(VUS)" ]; then \
+		echo "$(RED)Usage: make benchmark LABEL=<label> VUS=<count>$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)Running benchmark '$(LABEL)' with $(VUS) VUs...$(NC)"
+	$(INFRASTRUCTURE_DIR)/benchmarks/run-benchmark.sh "$(LABEL)" "$(VUS)"
