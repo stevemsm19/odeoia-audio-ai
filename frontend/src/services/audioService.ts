@@ -31,11 +31,14 @@ type AudioStatusApiResponse = {
   overallStatus: OverallStatus;
   compressionStatus: StageStatus;
   compressedStorageUrl: string | null;
+  compressionDurationMs: number | null;
   transcriptionStatus: StageStatus;
   transcriptionError: string | null;
+  transcriptionDurationMs: number | null;
   summaryStatus: StageStatus;
   summaryStorageUrl: string | null;
   summaryError: string | null;
+  summaryDurationMs: number | null;
 };
 
 const readError = async (response: Response): Promise<string | null> => {

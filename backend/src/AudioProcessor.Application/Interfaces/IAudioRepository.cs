@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using AudioProcessor.Domain.Entities;
@@ -31,5 +32,13 @@ namespace AudioProcessor.Application.Interfaces
         /// <param name="audioRecord">The modified audio record entity containing updated values.</param>
         /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
         Task UpdateAudioRecordAsync(AudioRecord audioRecord, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Retrieves every audio record whose three stages (Compression, Transcription,
+        /// Summary) are still <c>Pending</c> — i.e. uploaded but not yet claimed by the
+        /// background processing loop — ordered oldest first.
+        /// </summary>
+        /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+        Task<IReadOnlyList<AudioRecord>> GetPendingAudioRecordsAsync(CancellationToken cancellationToken = default);
     }
 }

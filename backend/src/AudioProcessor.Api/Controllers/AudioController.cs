@@ -20,21 +20,20 @@ namespace AudioProcessor.Api.Controllers
     public class AudioController : ControllerBase
     {
         private readonly UploadAudioUseCase _uploadAudioUseCase;
-        private readonly IAudioProcessingLauncher _audioProcessingLauncher;
         private readonly IAudioRepository _audioRepository;
 
         private static readonly string[] AllowedExtensions = { ".mp3", ".wav" };
 
-        public AudioController(UploadAudioUseCase uploadAudioUseCase, IAudioProcessingLauncher audioProcessingLauncher, IAudioRepository audioRepository)
+        public AudioController(UploadAudioUseCase uploadAudioUseCase, IAudioRepository audioRepository)
         {
             _uploadAudioUseCase = uploadAudioUseCase ?? throw new ArgumentNullException(nameof(uploadAudioUseCase));
-            _audioProcessingLauncher = audioProcessingLauncher ?? throw new ArgumentNullException(nameof(audioProcessingLauncher));
             _audioRepository = audioRepository ?? throw new ArgumentNullException(nameof(audioRepository));
         }
 
         /// <summary>
-        /// Uploads an audio file (.mp3 or .wav) to Supabase storage, records its metadata in the database,
-        /// launches its two background processing flows, and returns immediately.
+        /// Uploads an audio file (.mp3 or .wav) to Supabase storage, records its metadata in the
+        /// database as <c>Pending</c>, and returns immediately — the background processing
+        /// service picks it up and runs its two processing flows asynchronously.
         /// </summary>
         [HttpPost("upload")]
         [ProducesResponseType(typeof(AudioUploadResponse), StatusCodes.Status202Accepted)]
@@ -60,11 +59,8 @@ namespace AudioProcessor.Api.Controllers
                 cancellationToken
             );
 
-            // 2. Launch the two independent processing flows (Compression, Transcription→Summary),
-            // one explicit Thread per flow, and return immediately — they update their own state.
-            string correlationId = HttpContext.TraceIdentifier;
-            _audioProcessingLauncher.LaunchProcessing(audioRecord.Id, correlationId);
-
+            // 2. The record stays Pending — the background processing service claims it
+            // and runs its two processing flows on its own schedule.
             var response = new AudioUploadResponse(
                 audioRecord.Id,
                 audioRecord.FileName,
@@ -72,7 +68,7 @@ namespace AudioProcessor.Api.Controllers
                 audioRecord.Status.ToString(),
                 audioRecord.CreatedAt);
 
-            // 3. Return HTTP 202 Accepted to signal that background processing has started
+            // 3. Return HTTP 202 Accepted to signal that the upload was accepted for processing
             return Accepted(response);
         }
 
@@ -95,11 +91,14 @@ namespace AudioProcessor.Api.Controllers
                 record.OverallStatus.ToString(),
                 record.Status.ToString(),
                 record.CompressedStorageUrl,
+                record.CompressionDurationMs,
                 record.TranscriptionStatus.ToString(),
                 record.TranscriptionError,
+                record.TranscriptionDurationMs,
                 record.SummaryStatus.ToString(),
                 record.SummaryStorageUrl,
-                record.SummaryError));
+                record.SummaryError,
+                record.SummaryDurationMs));
         }
     }
 
@@ -111,9 +110,12 @@ namespace AudioProcessor.Api.Controllers
         string OverallStatus,
         string CompressionStatus,
         string? CompressedStorageUrl,
+        long? CompressionDurationMs,
         string TranscriptionStatus,
         string? TranscriptionError,
+        long? TranscriptionDurationMs,
         string SummaryStatus,
         string? SummaryStorageUrl,
-        string? SummaryError);
+        string? SummaryError,
+        long? SummaryDurationMs);
 }

@@ -16,7 +16,7 @@ Usage: $0 <label> <vus> [container_name ...]
 Environment overrides:
   BASE_URL                default: http://localhost:8080
   POLL_INTERVAL_MS        default: 1000
-  MAX_WAIT_MS             default: 120000
+  MAX_WAIT_MS             default: 240000
   STATS_INTERVAL_SECONDS  default: 2
   AUDIO_FILE_PATH         default: <this dir>/test-audio/sample.mp3
 EOF
@@ -35,7 +35,7 @@ fi
 
 BASE_URL="${BASE_URL:-http://localhost:8080}"
 POLL_INTERVAL_MS="${POLL_INTERVAL_MS:-1000}"
-MAX_WAIT_MS="${MAX_WAIT_MS:-120000}"
+MAX_WAIT_MS="${MAX_WAIT_MS:-240000}"
 STATS_INTERVAL_SECONDS="${STATS_INTERVAL_SECONDS:-2}"
 AUDIO_FILE_PATH="${AUDIO_FILE_PATH:-${SCRIPT_DIR}/test-audio/sample.mp3}"
 
@@ -60,15 +60,17 @@ trap cleanup_stats EXIT
 # 3. Record start timestamp.
 START_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-# 4. Run k6.
+# 4. Run k6. upload-audio.js defines handleSummary(), which writes
+# k6-summary.json and summary.html itself (using RESULTS_DIR below) — that
+# makes k6 ignore --summary-export, so it's intentionally not passed here.
 set +e
 BASE_URL="$BASE_URL" \
 POLL_INTERVAL_MS="$POLL_INTERVAL_MS" \
 MAX_WAIT_MS="$MAX_WAIT_MS" \
 VUS="$VUS" \
 AUDIO_FILE_PATH="$AUDIO_FILE_PATH" \
+RESULTS_DIR="$RESULTS_DIR" \
 k6 run \
-    --summary-export "${RESULTS_DIR}/k6-summary.json" \
     "${SCRIPT_DIR}/upload-audio.js" \
     | tee "${RESULTS_DIR}/k6-output.txt"
 K6_EXIT_CODE=${PIPESTATUS[0]}
@@ -97,6 +99,7 @@ echo ""
 echo "Benchmark '${LABEL}' finished (k6 exit code: ${K6_EXIT_CODE})."
 echo "Results:"
 echo "  ${RESULTS_DIR}/k6-summary.json"
+echo "  ${RESULTS_DIR}/summary.html"
 echo "  ${RESULTS_DIR}/k6-output.txt"
 echo "  ${RESULTS_DIR}/docker-stats.csv"
 echo "  ${RESULTS_DIR}/timing.txt"

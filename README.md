@@ -157,16 +157,11 @@ curl -X POST http://localhost:8080/api/audio/upload \
 **Example status response:**
 ```json
 {
-  "id": "6730c377-a21c-4980-80c9-f0b77f9e6d7a",
+  "id": "75ecd41c-c5c2-40ed-95dd-a96af01bf473",
   "fileName": "audio.mp3",
-  "overallStatus": "Processing",
-  "compressionStatus": "Completed",
-  "compressedStorageUrl": "https://your-project.supabase.co/storage/v1/object/public/...",
-  "transcriptionStatus": "Completed",
-  "transcriptionError": null,
-  "summaryStatus": "Processing",
-  "summaryStorageUrl": null,
-  "summaryError": null
+  "storageUrl": "https://srxqtcpbrhbngfxjlxql.supabase.co/storage/v1/object/public/audio-files/75ecd41c-c5c2-40ed-95dd-a96af01bf473/audio.mp3",
+  "status": "Pending",
+  "createdAt": "2026-08-16T11:58:30.8526693Z"
 }
 ```
 
@@ -215,6 +210,7 @@ All automation is provided through `make`. Run `make help` to list all available
 | `make frontend-dev`            | Start the Vite dev server                            |
 | `make frontend-test`           | Run frontend unit tests (Vitest)                     |
 | `make frontend-check`          | Run frontend lint + production build + tests         |
+| `make benchmark LABEL=<l> VUS=<n>` | Run a k6 upload benchmark (see `infrastructure/benchmarks/README.md`) |
 
 ---
 
@@ -243,7 +239,7 @@ React UI → frontend service layer → /api (Nginx proxy) → .NET API
                                                         → Supabase Storage / Postgres
 ```
 
-Both flows are launched directly from the upload request (no queue, no shared worker pool) and run independently — see `AGENTS.md` section 4 for the concurrency model.
+Both flows are launched directly from the upload request (no queue, no shared worker pool) and run independently.
 
 This project strictly follows **Clean Architecture**:
 

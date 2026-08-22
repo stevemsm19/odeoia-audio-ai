@@ -47,7 +47,7 @@ namespace AudioProcessor.Tests.Infrastructure
         /// observed (logged) rather than swallowed as an unobserved Task exception.
         /// </summary>
         [Fact]
-        public void LaunchProcessing_WhenScopeCreationThrows_DoesNotThrowSynchronously_AndLogsTheFailure()
+        public async Task ProcessAsync_WhenScopeCreationThrows_DoesNotThrow_AndLogsTheFailure()
         {
             var mockScopeFactory = new Mock<IServiceScopeFactory>();
             mockScopeFactory
@@ -59,10 +59,9 @@ namespace AudioProcessor.Tests.Infrastructure
 
             var audioRecordId = Guid.NewGuid();
 
-            // Must return immediately without throwing — the background work it
-            // starts runs independently, and any failure inside it must never reach
-            // the caller (which, in production, is an HTTP request thread).
-            var exception = Record.Exception(() => launcher.LaunchProcessing(audioRecordId, "corr-r8"));
+            // Every failure inside processing must be contained and logged, never
+            // rethrown to the caller (in production, the background processing loop).
+            var exception = await Record.ExceptionAsync(() => launcher.ProcessAsync(audioRecordId, "corr-r8"));
             Assert.Null(exception);
 
             bool loggedTheFailure = WaitUntil(() => CountErrorLogs(mockLogger) >= 1, TimeSpan.FromSeconds(2));
@@ -76,7 +75,7 @@ namespace AudioProcessor.Tests.Infrastructure
         /// shared between them rather than each flow re-downloading it.
         /// </summary>
         [Fact]
-        public async Task LaunchProcessing_DownloadsOriginalAudioOnce_AndCompletesBothFlowsConcurrently()
+        public async Task ProcessAsync_DownloadsOriginalAudioOnce_AndCompletesBothFlowsConcurrently()
         {
             var record = NewRecord();
 
@@ -130,13 +129,11 @@ namespace AudioProcessor.Tests.Infrastructure
                 provider.GetRequiredService<IServiceScopeFactory>(),
                 provider.GetRequiredService<ILogger<AudioProcessingLauncher>>());
 
-            launcher.LaunchProcessing(record.Id, "corr-shared-download");
+            await launcher.ProcessAsync(record.Id, "corr-shared-download");
 
-            bool bothCompleted = WaitUntil(
-                () => record.Status == AudioProcessingStatus.Completed && record.SummaryStatus == AudioSummaryStatus.Completed,
-                TimeSpan.FromSeconds(5));
-
-            Assert.True(bothCompleted, $"Expected both flows to complete. Compression={record.Status}, Summary={record.SummaryStatus}");
+            Assert.True(
+                record.Status == AudioProcessingStatus.Completed && record.SummaryStatus == AudioSummaryStatus.Completed,
+                $"Expected both flows to complete. Compression={record.Status}, Summary={record.SummaryStatus}");
 
             mockHttpMessageHandler
                 .Protected()
