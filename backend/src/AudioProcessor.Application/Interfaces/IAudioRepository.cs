@@ -40,5 +40,12 @@ namespace AudioProcessor.Application.Interfaces
         /// </summary>
         /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
         Task<IReadOnlyList<AudioRecord>> GetPendingAudioRecordsAsync(CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Retrieves every audio record associated with the given user email, newest first.
+        /// </summary>
+        /// <param name="userEmail">The already-normalized (trimmed, lowercased) user email to filter by.</param>
+        /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+        Task<IReadOnlyList<AudioRecord>> GetByUserEmailAsync(string userEmail, CancellationToken cancellationToken = default);
     }
 }

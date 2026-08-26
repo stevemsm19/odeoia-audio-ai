@@ -29,9 +29,12 @@ namespace AudioProcessor.Application.UseCases
         /// <param name="fileStream">The stream containing raw audio data.</param>
         /// <param name="fileName">The original file name of the audio.</param>
         /// <param name="contentType">The media/MIME type of the audio file.</param>
+        /// <param name="userEmail">Optional email of the uploading user, used to associate the audio with them.</param>
         /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
         /// <returns>A newly created <see cref="AudioRecord"/> indicating successful upload and registration.</returns>
-        public async Task<AudioRecord> ExecuteAsync(Stream fileStream, string fileName, string contentType, CancellationToken cancellationToken = default)
+        public async Task<AudioRecord> ExecuteAsync(
+            Stream fileStream, string fileName, string contentType,
+            string? userEmail = null, CancellationToken cancellationToken = default)
         {
             if (fileStream is null || fileStream.Length == 0)
                 throw new ArgumentException("Audio file stream cannot be null or empty.", nameof(fileStream));
@@ -52,7 +55,8 @@ namespace AudioProcessor.Application.UseCases
                 id: audioRecordId,
                 storageUrl: publicStorageUrl,
                 fileName: fileName,
-                createdAt: DateTime.UtcNow
+                createdAt: DateTime.UtcNow,
+                userEmail: userEmail
             );
 
             await _audioRepository.SaveAudioRecordAsync(audioRecord, cancellationToken);

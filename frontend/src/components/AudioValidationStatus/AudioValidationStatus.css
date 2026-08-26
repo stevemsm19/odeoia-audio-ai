@@ -1,0 +1,114 @@
+.audio-validation-status {
+  margin-top: 20px;
+  margin-bottom: 20px;
+}
+
+.validation-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 13px;
+  border-radius: 10px;
+  background: #f2f1ed;
+  font-size: 13px;
+}
+
+.validation-icon {
+  width: 20px;
+  flex: none;
+  text-align: center;
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.validation-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.validation-label {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.validation-reason {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Checking signature / Decoding / Loading model / Transcribing states */
+.validation-row--checkingsignature,
+.validation-row--decoding,
+.validation-row--loadingmodel,
+.validation-row--transcribing {
+  background: var(--soft);
+}
+
+.validation-row--checkingsignature .validation-icon,
+.validation-row--decoding .validation-icon,
+.validation-row--loadingmodel .validation-icon,
+.validation-row--transcribing .validation-icon {
+  color: var(--primary);
+  animation: validation-pulse 1.3s infinite;
+}
+
+.validation-row--checkingsignature .validation-label,
+.validation-row--decoding .validation-label,
+.validation-row--loadingmodel .validation-label,
+.validation-row--transcribing .validation-label {
+  color: var(--primary);
+}
+
+/* Valid state */
+.validation-row--valid {
+  background: #f1f7db;
+}
+
+.validation-row--valid .validation-icon {
+  color: #6b7c1f;
+}
+
+.validation-row--valid .validation-label {
+  color: #6b7c1f;
+}
+
+.validation-row--valid .validation-reason {
+  color: #687038;
+}
+
+/* Invalid / Error states */
+.validation-row--invalid,
+.validation-row--error {
+  background: #fff1f0;
+}
+
+.validation-row--invalid .validation-icon,
+.validation-row--error .validation-icon {
+  color: #993e36;
+}
+
+.validation-row--invalid .validation-label,
+.validation-row--error .validation-label {
+  color: #993e36;
+}
+
+.validation-row--invalid .validation-reason,
+.validation-row--error .validation-reason {
+  color: #993e36;
+  font-weight: 500;
+}
+
+/* Idle state */
+.validation-row--idle {
+  color: var(--muted);
+  background: transparent;
+}
+
+@keyframes validation-pulse {
+  50% {
+    transform: scale(1.2);
+    opacity: 0.55;
+  }
+}

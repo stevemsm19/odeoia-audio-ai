@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { AudioPlayer } from "../../components/AudioPlayer/AudioPlayer";
+import { AudioResult } from "../../components/AudioResult/AudioResult";
 import { Button } from "../../components/Button/Button";
 import { FileUpload } from "../../components/FileUpload/FileUpload";
 import { PipelineStatus } from "../../components/PipelineStatus/PipelineStatus";
 import { useAuth } from "../../features/auth/AuthContext";
+import {
+  validateAudioFile,
+  type ValidationHandle,
+} from "../../features/audioValidation/validateAudioFile";
 import {
   AudioProcessingError,
   processAudio,
@@ -14,6 +18,7 @@ import {
 import "./HomePage.css";
 
 type ViewState = "idle" | "selected" | "processing" | "completed" | "error";
+type ValidationState = "idle" | "checking" | "valid" | "invalid";
 
 const hasAnyFailure = (result: AudioProcessingResult): boolean =>
   result.compressionStatus === "Failed" ||
@@ -24,30 +29,56 @@ export function HomePage() {
   const { user } = useAuth();
   const [file, setFile] = useState<File | null>(null);
   const [state, setState] = useState<ViewState>("idle");
-  const [pipeline, setPipeline] = useState<AudioProcessingSnapshot | null>(null);
+  const [pipeline, setPipeline] = useState<AudioProcessingSnapshot | null>(
+    null,
+  );
   const [result, setResult] = useState<AudioProcessingResult | null>(null);
   const [error, setError] = useState("");
+  const [validation, setValidation] = useState<ValidationState>("idle");
+  const [validationReason, setValidationReason] = useState("");
   const requestController = useRef<AbortController | null>(null);
+  const validationHandle = useRef<ValidationHandle | null>(null);
 
   const cancelProcessing = () => requestController.current?.abort();
-  useEffect(() => () => requestController.current?.abort(), []);
+  const cancelValidation = () => validationHandle.current?.cancel();
+  useEffect(
+    () => () => {
+      requestController.current?.abort();
+      cancelValidation();
+    },
+    [],
+  );
 
   const selectFile = (next: File) => {
     cancelProcessing();
+    cancelValidation();
     setFile(next);
     setResult(null);
     setPipeline(null);
     setError("");
     setState("selected");
+    setValidation("checking");
+    setValidationReason("");
+
+    const handle = validateAudioFile(next);
+    validationHandle.current = handle;
+    handle.promise.then((result) => {
+      if (validationHandle.current !== handle) return; // superseded by a newer selection
+      setValidation(result.valid ? "valid" : "invalid");
+      setValidationReason(result.reason);
+    });
   };
 
   const removeFile = () => {
     cancelProcessing();
+    cancelValidation();
     setFile(null);
     setResult(null);
     setPipeline(null);
     setError("");
     setState("idle");
+    setValidation("idle");
+    setValidationReason("");
   };
 
   const start = async () => {
@@ -61,6 +92,7 @@ export function HomePage() {
       const completed = await processAudio(file, {
         signal: controller.signal,
         onStatus: setPipeline,
+        email: user?.email,
       });
       setResult(completed);
       setState("completed");
@@ -140,7 +172,16 @@ export function HomePage() {
               onRemove={removeFile}
               disabled={state === "processing"}
             />
-            {state === "selected" && (
+            {state === "selected" && validation === "checking" && (
+              <p className="validation-status">Checking audio…</p>
+            )}
+            {state === "selected" && validation === "invalid" && (
+              <div className="error-box" role="alert">
+                {validationReason || "This audio file couldn't be validated."}
+                <button onClick={removeFile}>Choose another file</button>
+              </div>
+            )}
+            {state === "selected" && validation === "valid" && (
               <Button className="wide" onClick={start}>
                 Process audio <span>→</span>
               </Button>
@@ -174,8 +215,8 @@ export function HomePage() {
               <div className="result-content">
                 {hasAnyFailure(result) ? (
                   <div className="error-box" role="alert">
-                    Some steps didn't complete successfully — see the
-                    breakdown above for which one.{" "}
+                    Some steps didn't complete successfully — see the breakdown
+                    above for which one.{" "}
                     <button onClick={start}>Try again</button>
                     <p className="retry-hint">
                       Trying again reprocesses the full audio from the start —
@@ -191,28 +232,19 @@ export function HomePage() {
                     </div>
                   </div>
                 )}
-                {result.processedAudioUrl ? (
-                  <AudioPlayer
-                    src={result.processedAudioUrl}
-                    fileName={result.originalFileName.replace(/\.[^.]+$/, ".aac")}
-                  />
-                ) : (
-                  <p className="stage-unavailable">
-                    Compression failed — no processed audio to play.
-                  </p>
-                )}
-                <article className="summary">
-                  <span className="summary-icon">✦</span>
-                  <div>
-                    <h4>Summary</h4>
-                    <p>
-                      {result.summaryText ||
-                        result.summaryError ||
-                        "No summary available for this audio"}
-                    </p>
-                    <small>Shown from the current IA capability.</small>
-                  </div>
-                </article>
+                <AudioResult
+                  size="large"
+                  fileName={result.originalFileName}
+                  audioUrl={result.processedAudioUrl}
+                  downloadFileName={result.originalFileName.replace(
+                    /\.[^.]+$/,
+                    ".aac",
+                  )}
+                  summary={{
+                    text: result.summaryText,
+                    error: result.summaryError,
+                  }}
+                />
                 <Button className="secondary wide" onClick={removeFile}>
                   Process another file
                 </Button>

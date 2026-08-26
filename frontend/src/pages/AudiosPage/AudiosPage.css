@@ -1,0 +1,44 @@
+.audios-page {
+  max-width: 900px;
+  margin: auto;
+  padding: 78px 28px 100px;
+}
+.audios-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  margin-bottom: 30px;
+  gap: 20px;
+}
+.audios-header h1 {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 38px;
+  letter-spacing: -1.5px;
+  margin: 12px 0 6px;
+}
+.audios-header p {
+  font-size: 13px;
+  color: var(--muted);
+}
+.audios-empty {
+  padding: 40px;
+  text-align: center;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.audios-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.audio-item {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+}

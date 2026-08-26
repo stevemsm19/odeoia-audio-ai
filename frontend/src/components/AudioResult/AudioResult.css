@@ -1,0 +1,35 @@
+.audio-result-heading {
+  margin-bottom: 12px;
+}
+.audio-result-heading strong {
+  font-size: 14px;
+}
+.audio-result .inline-link {
+  display: inline-block;
+  margin-top: 10px;
+}
+.audio-result-summary {
+  background: #f4f3ff;
+  border-radius: 11px;
+  padding: 15px;
+  display: flex;
+  gap: 11px;
+  margin-top: 14px;
+}
+.audio-result-summary .summary-icon {
+  color: var(--primary);
+  font-size: 20px;
+}
+.audio-result-summary h4 {
+  font-size: 13px;
+  margin: 0 0 6px;
+}
+.audio-result-summary p {
+  margin: 0;
+  color: #555d68;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.audio-result-large .audio-result-summary {
+  margin-bottom: 14px;
+}

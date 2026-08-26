@@ -119,7 +119,7 @@ const toSnapshot = (response: AudioStatusApiResponse): AudioProcessingSnapshot =
   summaryStatus: response.summaryStatus,
 });
 
-async function fetchSummaryText(summaryStorageUrl: string, signal?: AbortSignal): Promise<string | null> {
+export async function fetchSummaryText(summaryStorageUrl: string, signal?: AbortSignal): Promise<string | null> {
   try {
     const response = await fetch(summaryStorageUrl, { signal });
     if (!response.ok) return null;
@@ -132,14 +132,16 @@ async function fetchSummaryText(summaryStorageUrl: string, signal?: AbortSignal)
 type ProcessAudioOptions = {
   signal?: AbortSignal;
   onStatus?: (snapshot: AudioProcessingSnapshot) => void;
+  email?: string;
 };
 
 export async function processAudio(
   file: File,
-  { signal, onStatus }: ProcessAudioOptions,
+  { signal, onStatus, email }: ProcessAudioOptions,
 ): Promise<AudioProcessingResult> {
   const formData = new FormData();
   formData.append("file", file);
+  if (email) formData.append("email", email);
 
   const upload = await request<AudioUploadApiResponse>("/audio/upload", {
     method: "POST",
@@ -175,4 +177,33 @@ export async function processAudio(
   throw new AudioProcessingError(
     "Audio processing is taking longer than expected. Please try again later.",
   );
+}
+
+// Mirrors AudioListItemResponse (backend/src/AudioProcessor.Api/Controllers/AudioController.cs).
+type AudioListApiResponse = {
+  id: string;
+  fileName: string;
+  storageUrl: string;
+  compressedStorageUrl: string | null;
+  overallStatus: OverallStatus;
+  summaryStorageUrl: string | null;
+  createdAt: string;
+};
+
+export type AudioListItem = {
+  id: string;
+  fileName: string;
+  storageUrl: string;
+  compressedStorageUrl: string | null;
+  overallStatus: OverallStatus;
+  summaryStorageUrl: string | null;
+  createdAt: string;
+};
+
+export async function listAudios(email: string, signal?: AbortSignal): Promise<AudioListItem[]> {
+  const items = await request<AudioListApiResponse[]>(
+    `/audio?email=${encodeURIComponent(email)}`,
+    { signal },
+  );
+  return items.map((item) => ({ ...item }));
 }
