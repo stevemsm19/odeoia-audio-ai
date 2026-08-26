@@ -95,6 +95,11 @@ namespace AudioProcessor.Infrastructure.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("transcription_status");
 
+                    b.Property<string>("UserEmail")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("user_email");
+
                     b.HasKey("Id");
 
                     b.ToTable("audio_records", (string)null);

@@ -53,7 +53,7 @@ def main() -> int:
     result = run_subprocess(logger, [
         args.llama_cli, "-m", args.llm_model, "-p", prompt,
         "-n", "256", "-c", "8192", "-t", "2", "--temp", "0",
-        "--no-display-prompt", "--no-conversation", "--single-turn", "--simple-io", "--log-disable",
+        "--no-display-prompt", "--single-turn", "--simple-io", "--log-disable",
     ])
     elapsed_ms = round((time.perf_counter() - started) * 1000)
 

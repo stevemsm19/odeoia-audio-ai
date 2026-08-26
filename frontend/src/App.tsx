@@ -5,6 +5,7 @@ import { HomePage } from "./pages/HomePage/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { SignupPage } from "./pages/SignupPage";
 import { AboutPage } from "./pages/AboutPage/AboutPage";
+import { AudiosPage } from "./pages/AudiosPage/AudiosPage";
 
 export default function App() {
   return (
@@ -12,6 +13,7 @@ export default function App() {
       <Routes>
         <Route element={<AppLayout />}>
           <Route path="/" element={<HomePage />} />
+          <Route path="/audios" element={<AudiosPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />

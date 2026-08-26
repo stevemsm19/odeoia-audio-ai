@@ -98,6 +98,11 @@ namespace AudioProcessor.Infrastructure.Persistence
                     .HasColumnName("summary_error")
                     .HasMaxLength(1000)
                     .IsRequired(false);
+
+                entity.Property(e => e.UserEmail)
+                    .HasColumnName("user_email")
+                    .HasMaxLength(320)
+                    .IsRequired(false);
             });
         }
     }

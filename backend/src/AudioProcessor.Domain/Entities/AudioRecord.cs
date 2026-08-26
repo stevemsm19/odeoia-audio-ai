@@ -10,6 +10,12 @@ namespace AudioProcessor.Domain.Entities
         public string FileName { get; private set; }
         public DateTime CreatedAt { get; private set; }
 
+        /// <summary>
+        /// Optional email of the user who uploaded this audio. Normalized (trimmed,
+        /// lowercased) on construction. Null when the upload wasn't associated with a user.
+        /// </summary>
+        public string? UserEmail { get; private set; }
+
         // Flujo 1 (Compression) — columns owned exclusively by this flow.
         public string? CompressedStorageUrl { get; private set; }
         public AudioProcessingStatus Status { get; private set; }
@@ -56,7 +62,7 @@ namespace AudioProcessor.Domain.Entities
             FileName = string.Empty;
         }
 
-        public AudioRecord(Guid id, string storageUrl, string fileName, DateTime createdAt)
+        public AudioRecord(Guid id, string storageUrl, string fileName, DateTime createdAt, string? userEmail = null)
         {
             if (id == Guid.Empty)
                 throw new ArgumentException("Id cannot be empty.", nameof(id));
@@ -71,6 +77,7 @@ namespace AudioProcessor.Domain.Entities
             StorageUrl = storageUrl;
             FileName = fileName;
             CreatedAt = createdAt;
+            UserEmail = string.IsNullOrWhiteSpace(userEmail) ? null : userEmail.Trim().ToLowerInvariant();
             Status = AudioProcessingStatus.Pending;
             CompressedStorageUrl = null;
             CompressionDurationMs = null;

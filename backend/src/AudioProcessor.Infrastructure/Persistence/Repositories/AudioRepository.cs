@@ -55,5 +55,14 @@ namespace AudioProcessor.Infrastructure.Persistence.Repositories
                 .OrderBy(r => r.CreatedAt)
                 .ToListAsync(cancellationToken);
         }
+
+        /// <inheritdoc />
+        public async Task<IReadOnlyList<AudioRecord>> GetByUserEmailAsync(string userEmail, CancellationToken cancellationToken = default)
+        {
+            return await _dbContext.AudioRecords
+                .Where(r => r.UserEmail == userEmail)
+                .OrderByDescending(r => r.CreatedAt)
+                .ToListAsync(cancellationToken);
+        }
     }
 }

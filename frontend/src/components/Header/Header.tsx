@@ -40,6 +40,9 @@ export function Header() {
           </NavLink>
           {user ? (
             <>
+              <NavLink onClick={close} to="/audios">
+                List Audios
+              </NavLink>
               <span className="user-greeting">Hi, {user.name}</span>
               <button
                 className="text-button"
