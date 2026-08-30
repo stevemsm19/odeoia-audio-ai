@@ -5,13 +5,14 @@ using AudioProcessor.Application.UseCases;
 using AudioProcessor.Infrastructure.Persistence;
 using AudioProcessor.Infrastructure.Persistence.Repositories;
 using AudioProcessor.Infrastructure.Storage;
+using AudioProcessor.Infrastructure.Services;
+using AudioProcessor.Infrastructure.ExternalServices;
 using AppSupabaseOptions = AudioProcessor.Infrastructure.ExternalServices.SupabaseOptions;
 using DotNetEnv;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Supabase;
 
 var envFilePath = FindEnvFile();
 if (envFilePath is not null)
@@ -36,7 +37,16 @@ static string? FindEnvFile()
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Bind Supabase options from environment variables
+const string frontendCorsPolicy = "FrontendDevelopment";
+string frontendOrigin = Environment.GetEnvironmentVariable("FRONTEND_ORIGIN") ?? "http://localhost:5173";
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(frontendCorsPolicy, policy => policy
+        .WithOrigins(frontendOrigin)
+        .AllowAnyHeader()
+        .AllowAnyMethod());
+});
+
 builder.Services.Configure<AppSupabaseOptions>(options =>
 {
     options.Url = Environment.GetEnvironmentVariable("SUPABASE_URL")
@@ -47,33 +57,26 @@ builder.Services.Configure<AppSupabaseOptions>(options =>
         ?? throw new InvalidOperationException("BUCKET environment variable is not set.");
 });
 
-// Register Supabase client as a singleton
-builder.Services.AddSingleton(provider =>
-{
-    string url = Environment.GetEnvironmentVariable("SUPABASE_URL")!;
-    string key = Environment.GetEnvironmentVariable("SUPABASE_KEY")!;
-
-    var supabaseClientOptions = new Supabase.SupabaseOptions
-    {
-        AutoConnectRealtime = false
-    };
-
-    var client = new Client(url, key, supabaseClientOptions);
-    client.InitializeAsync().GetAwaiter().GetResult();
-    return client;
-});
-
-// Register EF Core with PostgreSQL
 string connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")
     ?? throw new InvalidOperationException("DB_CONNECTION_STRING environment variable is not set.");
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString));
 
-// Register Application and Infrastructure services
 builder.Services.AddScoped<IAudioRepository, AudioRepository>();
 builder.Services.AddScoped<IAudioStorageService, SupabaseStorageService>();
+builder.Services.AddScoped<IAudioCompressionService, FFmpegAudioCompressionService>();
+builder.Services.Configure<LocalModelWorkerOptions>(builder.Configuration.GetSection(LocalModelWorkerOptions.SectionName));
+builder.Services.AddScoped<IAudioTranscriptionService, LocalWhisperCppTranscriptionService>();
+builder.Services.AddScoped<IAudioSummarizationService, LocalLlamaCppSummarizationService>();
 builder.Services.AddScoped<UploadAudioUseCase>();
+builder.Services.AddScoped<ProcessAudioCompressionCommandHandler>();
+builder.Services.AddScoped<ProcessAudioSummaryCommandHandler>();
+
+builder.Services.AddScoped<IAudioProcessingLauncher, AudioProcessingLauncher>();
+builder.Services.AddHttpClient();
+
+builder.Services.AddSingleton<AudioBackgroundProcessingThread>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -95,8 +98,18 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Audio Processor API v1"));
 }
 
+app.UseCors(frontendCorsPolicy);
 app.UseAuthorization();
 app.MapControllers();
 app.MapGet("/", () => "Audio Processor API is running!");
+
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    context.Database.Migrate();
+}
+
+app.Services.GetRequiredService<AudioBackgroundProcessingThread>().Start();
 
 app.Run();

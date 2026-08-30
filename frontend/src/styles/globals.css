@@ -1,0 +1,110 @@
+@import "./variables.css";
+
+* {
+  box-sizing: border-box;
+}
+html {
+  scroll-behavior: smooth;
+}
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "DM Sans", Arial, sans-serif;
+}
+button,
+input {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 3px solid #a59efa;
+  outline-offset: 3px;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+main {
+  flex: 1;
+}
+
+/* Shared visual utilities */
+.eyebrow {
+  color: var(--primary);
+  font-family: "DM Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 1.15px;
+  font-weight: 500;
+}
+.wide {
+  width: 100%;
+  min-height: 46px;
+}
+.field-error {
+  display: block;
+  color: #b33d3d !important;
+  font-size: 12px !important;
+  margin: 8px 0 0 !important;
+}
+.file-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--soft);
+  color: var(--primary);
+  font-weight: bold;
+  font-size: 20px;
+  flex: none;
+}
+.wave {
+  height: 95px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  z-index: 1;
+}
+.wave i {
+  display: block;
+  width: 9px;
+  height: 30px;
+  border-radius: 99px;
+  background: var(--lime);
+}
+.wave i:nth-child(2),
+.wave i:nth-child(8) {
+  height: 64px;
+}
+.wave i:nth-child(3),
+.wave i:nth-child(7) {
+  height: 85px;
+}
+.wave i:nth-child(4),
+.wave i:nth-child(6) {
+  height: 48px;
+}
+.wave i:nth-child(5) {
+  height: 95px;
+  background: #fff;
+}
+.inline-link {
+  font-weight: 700;
+  border-bottom: 1px solid var(--ink);
+  padding-bottom: 5px;
+}
+.inline-link span {
+  color: var(--primary);
+  margin-left: 8px;
+  font-size: 20px;
+}

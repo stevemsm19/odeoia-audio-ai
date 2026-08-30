@@ -6,10 +6,6 @@ using Microsoft.Extensions.Configuration;
 
 namespace AudioProcessor.Infrastructure.Persistence
 {
-    /// <summary>
-    /// Design-time factory used exclusively by EF Core CLI tools (migrations, db update).
-    /// Loads the .env file from /infrastructure to resolve the connection string.
-    /// </summary>
     public class ApplicationDbContextDesignTimeFactory : IDesignTimeDbContextFactory<ApplicationDbContext>
     {
         public ApplicationDbContext CreateDbContext(string[] args)
@@ -32,11 +28,8 @@ namespace AudioProcessor.Infrastructure.Persistence
 
         private static string ResolveEnvFilePath()
         {
-            // Walk up from the Infrastructure project directory to find infrastructure/.env
             string currentDir = Directory.GetCurrentDirectory();
 
-            // When invoked by EF CLI, cwd is typically the Infrastructure project directory
-            // Go up to workspace root (odeoia) and then into infrastructure/
             DirectoryInfo? dir = new DirectoryInfo(currentDir);
             while (dir != null)
             {

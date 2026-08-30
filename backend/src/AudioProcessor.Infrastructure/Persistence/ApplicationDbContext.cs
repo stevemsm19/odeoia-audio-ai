@@ -41,6 +41,64 @@ namespace AudioProcessor.Infrastructure.Persistence
                     .HasColumnName("created_at")
                     .HasColumnType("timestamptz")
                     .IsRequired();
+
+                entity.Property(e => e.CompressedStorageUrl)
+                    .HasColumnName("compressed_storage_url")
+                    .HasMaxLength(2048)
+                    .IsRequired(false);
+
+                entity.Property(e => e.Status)
+                    .HasColumnName("status")
+                    .HasConversion<string>()
+                    .HasMaxLength(50)
+                    .IsRequired();
+
+                entity.Property(e => e.CompressionDurationMs)
+                    .HasColumnName("compression_duration_ms")
+                    .HasColumnType("bigint")
+                    .IsRequired(false);
+
+                entity.Property(e => e.TranscriptionStatus)
+                    .HasColumnName("transcription_status")
+                    .HasConversion<string>()
+                    .HasMaxLength(50)
+                    .IsRequired();
+
+                entity.Property(e => e.TranscriptionDurationMs)
+                    .HasColumnName("transcription_duration_ms")
+                    .HasColumnType("bigint")
+                    .IsRequired(false);
+
+                entity.Property(e => e.TranscriptionError)
+                    .HasColumnName("transcription_error")
+                    .HasMaxLength(1000)
+                    .IsRequired(false);
+
+                entity.Property(e => e.SummaryStorageUrl)
+                    .HasColumnName("summary_storage_url")
+                    .HasMaxLength(2048)
+                    .IsRequired(false);
+
+                entity.Property(e => e.SummaryStatus)
+                    .HasColumnName("summary_status")
+                    .HasConversion<string>()
+                    .HasMaxLength(50)
+                    .IsRequired();
+
+                entity.Property(e => e.SummaryDurationMs)
+                    .HasColumnName("summary_duration_ms")
+                    .HasColumnType("bigint")
+                    .IsRequired(false);
+
+                entity.Property(e => e.SummaryError)
+                    .HasColumnName("summary_error")
+                    .HasMaxLength(1000)
+                    .IsRequired(false);
+
+                entity.Property(e => e.UserEmail)
+                    .HasColumnName("user_email")
+                    .HasMaxLength(320)
+                    .IsRequired(false);
             });
         }
     }

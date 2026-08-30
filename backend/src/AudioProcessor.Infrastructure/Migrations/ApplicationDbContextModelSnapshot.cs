@@ -29,6 +29,15 @@ namespace AudioProcessor.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("CompressedStorageUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("compressed_storage_url");
+
+                    b.Property<long?>("CompressionDurationMs")
+                        .HasColumnType("bigint")
+                        .HasColumnName("compression_duration_ms");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("created_at");
@@ -39,11 +48,57 @@ namespace AudioProcessor.Infrastructure.Migrations
                         .HasColumnType("character varying(512)")
                         .HasColumnName("file_name");
 
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("status");
+
                     b.Property<string>("StorageUrl")
                         .IsRequired()
                         .HasMaxLength(2048)
                         .HasColumnType("character varying(2048)")
                         .HasColumnName("storage_url");
+
+                    b.Property<long?>("SummaryDurationMs")
+                        .HasColumnType("bigint")
+                        .HasColumnName("summary_duration_ms");
+
+                    b.Property<string>("SummaryError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("summary_error");
+
+                    b.Property<string>("SummaryStatus")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("summary_status");
+
+                    b.Property<string>("SummaryStorageUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("summary_storage_url");
+
+                    b.Property<long?>("TranscriptionDurationMs")
+                        .HasColumnType("bigint")
+                        .HasColumnName("transcription_duration_ms");
+
+                    b.Property<string>("TranscriptionError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("transcription_error");
+
+                    b.Property<string>("TranscriptionStatus")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("transcription_status");
+
+                    b.Property<string>("UserEmail")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("user_email");
 
                     b.HasKey("Id");
 
