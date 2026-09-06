@@ -17,10 +17,12 @@ namespace AudioProcessor.Infrastructure.Persistence.Repositories
     public class AudioRepository : IAudioRepository
     {
         private readonly ApplicationDbContext _dbContext;
+        private readonly IAudioStatusNotifier _statusNotifier;
 
-        public AudioRepository(ApplicationDbContext dbContext)
+        public AudioRepository(ApplicationDbContext dbContext, IAudioStatusNotifier statusNotifier)
         {
             _dbContext = dbContext;
+            _statusNotifier = statusNotifier;
         }
 
         /// <inheritdoc />
@@ -43,6 +45,7 @@ namespace AudioProcessor.Infrastructure.Persistence.Repositories
             // Saving detected changes prevents a summary worker from overwriting fields
             // updated concurrently by a compression worker with stale values.
             await _dbContext.SaveChangesAsync(cancellationToken);
+            await _statusNotifier.NotifyStatusChangedAsync(audioRecord.Id, cancellationToken);
         }
 
         /// <inheritdoc />

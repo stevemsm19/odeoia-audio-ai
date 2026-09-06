@@ -1,6 +1,6 @@
 # OdeoIA
 
-OdeoIA is a full-stack audio-processing application. The .NET 8 API follows Clean Architecture and runs audio compression and AI-powered transcription/summarization as two independent background flows, each on its own explicit `Thread`. The React/Vite frontend uploads audio, polls the real job status, and plays the processed AAC file alongside the generated summary when it is ready.
+OdeoIA is a full-stack audio-processing application. Upload an `.mp3` or `.wav` file and get back a compressed AAC file, a noise-reduced version of it, an AI-generated transcript-based summary, and live status updates pushed to the browser as each stage finishes.
 
 ## Repository Structure
 
@@ -88,10 +88,9 @@ Runs the full stack in containers. No .NET SDK or FFmpeg installation required.
 make init-docker
 ```
 
-This single command:
-1. Installs the Git pre-push hook
-2. Downloads the required local AI models (Whisper + GGUF) into `models/`
-3. Builds and starts all Docker containers
+This command:
+1. Downloads the required local AI models (Whisper + GGUF) into `models/`
+2. Builds and starts all Docker containers
 
 **Windows PowerShell (manual equivalent):**
 ```powershell
@@ -108,7 +107,7 @@ Recommended for active coding and step-through debugging.
 make init
 ```
 
-This installs hooks, downloads models, and starts the API locally. Then in a separate terminal:
+This downloads models, and starts the API locally. Then in a separate terminal:
 
 ```bash
 make frontend-dev
@@ -146,26 +145,19 @@ Database migrations are applied automatically on startup. No manual migration st
 | Method | Endpoint              | Description                                              |
 | ------ | --------------------- | -------------------------------------------------------- |
 | `POST` | `/api/audio/upload`   | Upload an `.mp3` or `.wav` file; returns `202 Accepted` |
-| `GET`  | `/api/audio/{id}`     | Poll overall/per-stage status, compression URL, and summary URL |
+| `GET`  | `/api/audio/{id}`     | Get overall/per-stage status, compressed/filtered audio URLs, and summary URL |
+| `GET`  | `/api/audio?email=`   | List every audio uploaded by a user, newest first        |
 
 **Example upload:**
 ```bash
 curl -X POST http://localhost:8080/api/audio/upload \
-  -F "file=@/path/to/audio.mp3"
+  -F "file=@/path/to/audio.mp3" \
+  -F "email=someone@example.com"
 ```
 
-**Example status response:**
-```json
-{
-  "id": "75ecd41c-c5c2-40ed-95dd-a96af01bf473",
-  "fileName": "audio.mp3",
-  "storageUrl": "https://srxqtcpbrhbngfxjlxql.supabase.co/storage/v1/object/public/audio-files/75ecd41c-c5c2-40ed-95dd-a96af01bf473/audio.mp3",
-  "status": "Pending",
-  "createdAt": "2026-08-16T11:58:30.8526693Z"
-}
-```
+`overallStatus` is a single computed field (`Pending` / `Processing` / `Completed` — never `Failed`) meaning "every stage reached a terminal state," not a success verdict. Read the per-stage fields (`compressionStatus`, `noiseReductionStatus`, `transcriptionStatus`, `summaryStatus`, each `Pending`/`Processing`/`Completed`/`Failed`) to know what actually happened. The frontend gets notified of status changes over a WebSocket (SignalR, `/api/hubs/audio-status`) instead of polling.
 
-The API accepts `.mp3` and `.wav` files up to 50 MB. Upload returns immediately while two independent flows run in the background: Compression (FFmpeg) and Transcription→Summary (Whisper, then an LLM), each on its own `Thread`. `overallStatus` is a single computed field (`Pending` / `Processing` / `Completed` — never `Failed`) meaning "every stage reached a terminal state," not a success verdict; poll it to know when to stop polling, and read the per-stage fields (`compressionStatus`, `transcriptionStatus`, `summaryStatus`, each `Pending`/`Processing`/`Completed`/`Failed`) to know what actually happened.
+For runnable, ready-to-send examples of every endpoint above, open `backend/src/AudioProcessor.Api/AudioProcessor.Api.http` in an editor with a REST client extension (e.g. VS Code's [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client)) and send each request directly. Full interactive docs are also available via Swagger UI (see the access table in Step 3 above).
 
 ---
 
@@ -175,6 +167,7 @@ Run these commands before pushing changes. The pre-push hook enforces them autom
 
 | Command        | Description                                               |
 | -------------- | --------------------------------------------------------- |
+| `make setup-hooks`             | Install the Git pre-push hook                        |
 | `make format`  | Automatically fixes formatting and style issues globally. |
 | `make lint`    | Validates code style (fails if changes are needed).       |
 | `make build`   | Compiles the solution in Release mode.                    |
@@ -211,42 +204,3 @@ All automation is provided through `make`. Run `make help` to list all available
 | `make frontend-test`           | Run frontend unit tests (Vitest)                     |
 | `make frontend-check`          | Run frontend lint + production build + tests         |
 | `make benchmark LABEL=<l> VUS=<n>` | Run a k6 upload benchmark (see `infrastructure/benchmarks/README.md`) |
-
----
-
-## Pre-push Hook & CI/CD
-
-The pre-push hook detects which parts of the repository changed and runs only the relevant validations:
-
-- `backend/**` changes → `make backend-check`
-- `frontend/**` changes → `make frontend-check`
-- Shared files (`Makefile`, Compose, CI, scripts) → both checks
-- Documentation-only changes → no application validation
-- If the commit range cannot be determined → both checks
-
-GitLab CI applies the same path-aware strategy using `rules:changes`. Backend and frontend pipelines are fully independent and run in parallel.
-
----
-
-## Architecture
-
-```text
-React UI → frontend service layer → /api (Nginx proxy) → .NET API
-                                                        → one explicit Thread per flow, per audio
-                                                              → Flujo 1: FFmpeg (compression)
-                                                              → Flujo 2: Whisper (transcription) → LLM (summarization)
-                                                        → shared SemaphoreSlim (limits concurrent external processes)
-                                                        → Supabase Storage / Postgres
-```
-
-Both flows are launched directly from the upload request (no queue, no shared worker pool) and run independently.
-
-This project strictly follows **Clean Architecture**:
-
-```text
-Domain          Core entities, value objects, and domain exceptions (zero dependencies)
-Application     Use cases, ports/interfaces (strictly isolated from Infrastructure)
-Infrastructure  EF Core, Supabase storage, FFmpeg, Whisper/LLM subprocess adapters, Thread launcher
-Api             HTTP controllers, DI container (Program.cs)
-Tests           Unit tests for domain, application, and infrastructure layers
-```

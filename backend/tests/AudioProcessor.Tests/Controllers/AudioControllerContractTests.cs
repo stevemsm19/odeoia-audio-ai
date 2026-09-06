@@ -34,7 +34,11 @@ namespace AudioProcessor.Tests.Controllers
                 SummaryStatus: "Processing",
                 SummaryStorageUrl: null,
                 SummaryError: null,
-                SummaryDurationMs: null);
+                SummaryDurationMs: null,
+                NoiseReductionStatus: "Processing",
+                FilteredStorageUrl: null,
+                NoiseReductionError: null,
+                NoiseReductionDurationMs: null);
 
             string json = JsonSerializer.Serialize(response, AspNetCoreDefaultJsonOptions);
             using var document = JsonDocument.Parse(json);
@@ -54,6 +58,10 @@ namespace AudioProcessor.Tests.Controllers
             Assert.True(root.TryGetProperty("summaryStorageUrl", out _));
             Assert.True(root.TryGetProperty("summaryError", out _));
             Assert.True(root.TryGetProperty("summaryDurationMs", out _));
+            Assert.True(root.TryGetProperty("noiseReductionStatus", out _));
+            Assert.True(root.TryGetProperty("filteredStorageUrl", out _));
+            Assert.True(root.TryGetProperty("noiseReductionError", out _));
+            Assert.True(root.TryGetProperty("noiseReductionDurationMs", out _));
 
             // The old inline-text field must be gone — its replacement is summaryStorageUrl.
             Assert.False(root.TryGetProperty("summary", out _));

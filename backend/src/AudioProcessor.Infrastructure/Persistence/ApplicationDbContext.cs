@@ -103,6 +103,27 @@ namespace AudioProcessor.Infrastructure.Persistence
                     .HasColumnName("user_email")
                     .HasMaxLength(320)
                     .IsRequired(false);
+
+                entity.Property(e => e.FilteredStorageUrl)
+                    .HasColumnName("filtered_storage_url")
+                    .HasMaxLength(2048)
+                    .IsRequired(false);
+
+                entity.Property(e => e.NoiseReductionStatus)
+                    .HasColumnName("noise_reduction_status")
+                    .HasConversion<string>()
+                    .HasMaxLength(50)
+                    .IsRequired();
+
+                entity.Property(e => e.NoiseReductionDurationMs)
+                    .HasColumnName("noise_reduction_duration_ms")
+                    .HasColumnType("bigint")
+                    .IsRequired(false);
+
+                entity.Property(e => e.NoiseReductionError)
+                    .HasColumnName("noise_reduction_error")
+                    .HasMaxLength(1000)
+                    .IsRequired(false);
             });
         }
     }

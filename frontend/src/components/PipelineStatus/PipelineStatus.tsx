@@ -1,46 +1,38 @@
 import type { StageStatus } from "../../services/audioService";
 import "./PipelineStatus.css";
 
-type RowState = StageStatus | "NotImplemented" | "Waiting";
-
-const ICONS: Record<RowState, string> = {
+const ICONS: Record<StageStatus, string> = {
   Pending: "○",
   Processing: "⏳",
   Completed: "✔",
   Failed: "✕",
-  NotImplemented: "▢",
-  Waiting: "⏸",
 };
 
-const LABELS: Record<RowState, string> = {
+const LABELS: Record<StageStatus, string> = {
   Pending: "Pending",
   Processing: "In progress",
   Completed: "Completed",
   Failed: "Failed",
-  NotImplemented: "Not implemented yet",
-  Waiting: "Waiting for transcription",
 };
 
 type PipelineStatusProps = {
   compressionStatus: StageStatus;
+  noiseReductionStatus: StageStatus;
   transcriptionStatus: StageStatus;
   summaryStatus: StageStatus;
 };
 
 export function PipelineStatus({
   compressionStatus,
+  noiseReductionStatus,
   transcriptionStatus,
   summaryStatus,
 }: PipelineStatusProps) {
-  // Noise filtering stays visible with a fixed state even though it isn't implemented yet.
-  const summaryState: RowState =
-    summaryStatus === "Pending" && transcriptionStatus !== "Completed" ? "Waiting" : summaryStatus;
-
-  const stages: Array<{ key: string; label: string; state: RowState }> = [
+  const stages: Array<{ key: string; label: string; state: StageStatus }> = [
     { key: "compression", label: "Compression", state: compressionStatus },
-    { key: "filter", label: "Noise Filtering", state: "NotImplemented" },
+    { key: "filter", label: "Noise Filtering", state: noiseReductionStatus },
     { key: "transcription", label: "Transcription", state: transcriptionStatus },
-    { key: "summary", label: "Summary", state: summaryState },
+    { key: "summary", label: "Summary", state: summaryStatus },
   ];
 
   return (

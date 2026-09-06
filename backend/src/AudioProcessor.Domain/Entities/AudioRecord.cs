@@ -33,8 +33,15 @@ namespace AudioProcessor.Domain.Entities
         public long? SummaryDurationMs { get; private set; }
         public string? SummaryError { get; private set; }
 
+        // Flujo 1, stage 2 (Noise reduction) — runs after compression completes,
+        // on the compressed output. Owned exclusively by this stage.
+        public string? FilteredStorageUrl { get; private set; }
+        public AudioNoiseReductionStatus NoiseReductionStatus { get; private set; }
+        public long? NoiseReductionDurationMs { get; private set; }
+        public string? NoiseReductionError { get; private set; }
+
         /// <summary>
-        /// Computed, not stored. "Completed" means the three stages reached a
+        /// Computed, not stored. "Completed" means all stages reached a
         /// terminal state — it is not a success verdict.
         /// </summary>
         public AudioOverallStatus OverallStatus
@@ -42,13 +49,15 @@ namespace AudioProcessor.Domain.Entities
             get
             {
                 bool compressionTerminal = Status is AudioProcessingStatus.Completed or AudioProcessingStatus.Failed;
+                bool noiseReductionTerminal = NoiseReductionStatus is AudioNoiseReductionStatus.Completed or AudioNoiseReductionStatus.Failed;
                 bool transcriptionTerminal = TranscriptionStatus is AudioTranscriptionStatus.Completed or AudioTranscriptionStatus.Failed;
                 bool summaryTerminal = SummaryStatus is AudioSummaryStatus.Completed or AudioSummaryStatus.Failed;
 
-                if (compressionTerminal && transcriptionTerminal && summaryTerminal)
+                if (compressionTerminal && noiseReductionTerminal && transcriptionTerminal && summaryTerminal)
                     return AudioOverallStatus.Completed;
 
                 bool anyStageStarted = Status != AudioProcessingStatus.Pending
+                    || NoiseReductionStatus != AudioNoiseReductionStatus.Pending
                     || TranscriptionStatus != AudioTranscriptionStatus.Pending
                     || SummaryStatus != AudioSummaryStatus.Pending;
 
@@ -88,6 +97,10 @@ namespace AudioProcessor.Domain.Entities
             SummaryStatus = AudioSummaryStatus.Pending;
             SummaryDurationMs = null;
             SummaryError = null;
+            FilteredStorageUrl = null;
+            NoiseReductionStatus = AudioNoiseReductionStatus.Pending;
+            NoiseReductionDurationMs = null;
+            NoiseReductionError = null;
         }
 
         public void MarkAsProcessing()
@@ -115,6 +128,39 @@ namespace AudioProcessor.Domain.Entities
 
             CompressionDurationMs = compressionDurationMs;
             Status = AudioProcessingStatus.Failed;
+        }
+
+        public void MarkNoiseReductionAsProcessing()
+        {
+            if (NoiseReductionStatus == AudioNoiseReductionStatus.Completed)
+                return;
+
+            NoiseReductionStatus = AudioNoiseReductionStatus.Processing;
+            NoiseReductionError = null;
+        }
+
+        public void MarkNoiseReductionAsCompleted(string filteredStorageUrl, long durationMs)
+        {
+            if (string.IsNullOrWhiteSpace(filteredStorageUrl))
+                throw new ArgumentException("Filtered storage URL cannot be empty.", nameof(filteredStorageUrl));
+
+            if (durationMs < 0)
+                throw new ArgumentOutOfRangeException(nameof(durationMs));
+
+            FilteredStorageUrl = filteredStorageUrl;
+            NoiseReductionDurationMs = durationMs;
+            NoiseReductionError = null;
+            NoiseReductionStatus = AudioNoiseReductionStatus.Completed;
+        }
+
+        public void MarkNoiseReductionAsFailed(string error, long durationMs)
+        {
+            if (durationMs < 0)
+                throw new ArgumentOutOfRangeException(nameof(durationMs));
+
+            NoiseReductionDurationMs = durationMs;
+            NoiseReductionError = string.IsNullOrWhiteSpace(error) ? "Noise reduction failed." : error[..Math.Min(error.Length, 1000)];
+            NoiseReductionStatus = AudioNoiseReductionStatus.Failed;
         }
 
         public void MarkTranscriptionAsProcessing()

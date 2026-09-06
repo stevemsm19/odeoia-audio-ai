@@ -13,3 +13,9 @@ GET {{AudioProcessor.Api_HostAddress}}/api/audio/{36b953a3-ccbb-40d3-9cfb-3441b0
 Accept: application/json
 
 ###
+
+### List all audios for a user
+GET {{AudioProcessor.Api_HostAddress}}/api/audio?email=someone@example.com
+Accept: application/json
+
+###

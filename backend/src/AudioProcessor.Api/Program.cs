@@ -8,6 +8,7 @@ using AudioProcessor.Infrastructure.Persistence.Repositories;
 using AudioProcessor.Infrastructure.Storage;
 using AudioProcessor.Infrastructure.Services;
 using AudioProcessor.Infrastructure.ExternalServices;
+using AudioProcessor.Infrastructure.Realtime;
 using Microsoft.Extensions.Options;
 using AppSupabaseOptions = AudioProcessor.Infrastructure.ExternalServices.SupabaseOptions;
 using DotNetEnv;
@@ -47,7 +48,8 @@ builder.Services.AddCors(options =>
     options.AddPolicy(frontendCorsPolicy, policy => policy
         .WithOrigins(frontendOrigin)
         .AllowAnyHeader()
-        .AllowAnyMethod());
+        .AllowAnyMethod()
+        .AllowCredentials());
 });
 
 // Bind Supabase options from environment variables
@@ -85,9 +87,12 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString));
 
 // Register Application and Infrastructure services
+builder.Services.AddSignalR();
+builder.Services.AddScoped<IAudioStatusNotifier, SignalRAudioStatusNotifier>();
 builder.Services.AddScoped<IAudioRepository, AudioRepository>();
 builder.Services.AddScoped<IAudioStorageService, SupabaseStorageService>();
 builder.Services.AddScoped<IAudioCompressionService, FFmpegAudioCompressionService>();
+builder.Services.AddScoped<IAudioNoiseReductionService, FFmpegAudioNoiseReductionService>();
 builder.Services.Configure<LocalModelWorkerOptions>(builder.Configuration.GetSection(LocalModelWorkerOptions.SectionName));
 builder.Services.AddScoped<IAudioTranscriptionService, LocalWhisperCppTranscriptionService>();
 builder.Services.AddScoped<IAudioSummarizationService, LocalLlamaCppSummarizationService>();
@@ -141,6 +146,7 @@ if (app.Environment.IsDevelopment())
 app.UseCors(frontendCorsPolicy);
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<AudioStatusHub>("/api/hubs/audio-status");
 app.MapGet("/", () => "Audio Processor API is running!");
 
 // Automatically apply pending EF Core migrations in Development

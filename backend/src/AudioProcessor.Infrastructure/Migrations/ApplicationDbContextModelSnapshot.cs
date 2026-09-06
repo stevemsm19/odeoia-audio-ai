@@ -48,6 +48,26 @@ namespace AudioProcessor.Infrastructure.Migrations
                         .HasColumnType("character varying(512)")
                         .HasColumnName("file_name");
 
+                    b.Property<string>("FilteredStorageUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("filtered_storage_url");
+
+                    b.Property<long?>("NoiseReductionDurationMs")
+                        .HasColumnType("bigint")
+                        .HasColumnName("noise_reduction_duration_ms");
+
+                    b.Property<string>("NoiseReductionError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("noise_reduction_error");
+
+                    b.Property<string>("NoiseReductionStatus")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("noise_reduction_status");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(50)

@@ -6,6 +6,7 @@ import { useAuth } from "../../features/auth/AuthContext";
 import {
   fetchSummaryText,
   listAudios,
+  toAacFileName,
   type AudioListItem,
 } from "../../services/audioService";
 import "./AudiosPage.css";
@@ -107,6 +108,12 @@ export function AudiosPage() {
                 size="compact"
                 fileName={item.fileName}
                 audioUrl={item.compressedStorageUrl ?? item.storageUrl}
+                downloadFileName={toAacFileName(item.fileName)}
+                filteredAudioUrl={item.filteredStorageUrl}
+                filteredDownloadFileName={toAacFileName(item.fileName).replace(
+                  /\.aac$/,
+                  "-filtered.aac",
+                )}
                 summary={{ text: summaries[item.id] ?? null }}
               />
             </li>
