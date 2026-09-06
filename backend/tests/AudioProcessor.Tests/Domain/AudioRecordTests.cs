@@ -21,7 +21,45 @@ namespace AudioProcessor.Tests.Domain
             Assert.Equal(AudioProcessingStatus.Pending, record.Status);
             Assert.Equal(AudioTranscriptionStatus.Pending, record.TranscriptionStatus);
             Assert.Equal(AudioSummaryStatus.Pending, record.SummaryStatus);
+            Assert.Equal(AudioNoiseReductionStatus.Pending, record.NoiseReductionStatus);
             Assert.Equal(AudioOverallStatus.Pending, record.OverallStatus);
+        }
+
+        [Fact]
+        public void MarkNoiseReductionAsProcessing_SetsStatusAndClearsError()
+        {
+            var record = NewRecord();
+
+            record.MarkNoiseReductionAsProcessing();
+
+            Assert.Equal(AudioNoiseReductionStatus.Processing, record.NoiseReductionStatus);
+            Assert.Null(record.NoiseReductionError);
+        }
+
+        [Fact]
+        public void MarkNoiseReductionAsCompleted_SetsStatusAndUrl()
+        {
+            var record = NewRecord();
+            record.MarkNoiseReductionAsProcessing();
+
+            record.MarkNoiseReductionAsCompleted("https://example.supabase.co/audio-files/filtered.aac", 321);
+
+            Assert.Equal(AudioNoiseReductionStatus.Completed, record.NoiseReductionStatus);
+            Assert.Equal("https://example.supabase.co/audio-files/filtered.aac", record.FilteredStorageUrl);
+            Assert.Equal(321, record.NoiseReductionDurationMs);
+            Assert.Null(record.NoiseReductionError);
+        }
+
+        [Fact]
+        public void MarkNoiseReductionAsFailed_SetsStatusAndError()
+        {
+            var record = NewRecord();
+
+            record.MarkNoiseReductionAsFailed("ffmpeg afftdn exited with 1", 500);
+
+            Assert.Equal(AudioNoiseReductionStatus.Failed, record.NoiseReductionStatus);
+            Assert.Equal("ffmpeg afftdn exited with 1", record.NoiseReductionError);
+            Assert.Equal(500, record.NoiseReductionDurationMs);
         }
 
         [Fact]
@@ -83,21 +121,24 @@ namespace AudioProcessor.Tests.Domain
         }
 
         [Theory]
-        [InlineData(AudioProcessingStatus.Pending, AudioTranscriptionStatus.Pending, AudioSummaryStatus.Pending, AudioOverallStatus.Pending)]
-        [InlineData(AudioProcessingStatus.Processing, AudioTranscriptionStatus.Pending, AudioSummaryStatus.Pending, AudioOverallStatus.Processing)]
-        [InlineData(AudioProcessingStatus.Completed, AudioTranscriptionStatus.Processing, AudioSummaryStatus.Pending, AudioOverallStatus.Processing)]
-        [InlineData(AudioProcessingStatus.Completed, AudioTranscriptionStatus.Completed, AudioSummaryStatus.Completed, AudioOverallStatus.Completed)]
-        [InlineData(AudioProcessingStatus.Failed, AudioTranscriptionStatus.Failed, AudioSummaryStatus.Failed, AudioOverallStatus.Completed)]
-        [InlineData(AudioProcessingStatus.Completed, AudioTranscriptionStatus.Failed, AudioSummaryStatus.Failed, AudioOverallStatus.Completed)]
-        [InlineData(AudioProcessingStatus.Processing, AudioTranscriptionStatus.Completed, AudioSummaryStatus.Completed, AudioOverallStatus.Processing)]
+        [InlineData(AudioProcessingStatus.Pending, AudioNoiseReductionStatus.Pending, AudioTranscriptionStatus.Pending, AudioSummaryStatus.Pending, AudioOverallStatus.Pending)]
+        [InlineData(AudioProcessingStatus.Processing, AudioNoiseReductionStatus.Pending, AudioTranscriptionStatus.Pending, AudioSummaryStatus.Pending, AudioOverallStatus.Processing)]
+        [InlineData(AudioProcessingStatus.Completed, AudioNoiseReductionStatus.Processing, AudioTranscriptionStatus.Pending, AudioSummaryStatus.Pending, AudioOverallStatus.Processing)]
+        [InlineData(AudioProcessingStatus.Completed, AudioNoiseReductionStatus.Completed, AudioTranscriptionStatus.Processing, AudioSummaryStatus.Pending, AudioOverallStatus.Processing)]
+        [InlineData(AudioProcessingStatus.Completed, AudioNoiseReductionStatus.Completed, AudioTranscriptionStatus.Completed, AudioSummaryStatus.Completed, AudioOverallStatus.Completed)]
+        [InlineData(AudioProcessingStatus.Failed, AudioNoiseReductionStatus.Failed, AudioTranscriptionStatus.Failed, AudioSummaryStatus.Failed, AudioOverallStatus.Completed)]
+        [InlineData(AudioProcessingStatus.Completed, AudioNoiseReductionStatus.Failed, AudioTranscriptionStatus.Failed, AudioSummaryStatus.Failed, AudioOverallStatus.Completed)]
+        [InlineData(AudioProcessingStatus.Processing, AudioNoiseReductionStatus.Pending, AudioTranscriptionStatus.Completed, AudioSummaryStatus.Completed, AudioOverallStatus.Processing)]
         public void OverallStatus_IsComputedFromPerStageTerminalState(
             AudioProcessingStatus compression,
+            AudioNoiseReductionStatus noiseReduction,
             AudioTranscriptionStatus transcription,
             AudioSummaryStatus summary,
             AudioOverallStatus expectedOverall)
         {
             var record = NewRecord();
             DriveCompressionTo(record, compression);
+            DriveNoiseReductionTo(record, noiseReduction);
             DriveTranscriptionTo(record, transcription);
             DriveSummaryTo(record, summary);
 
@@ -121,6 +162,24 @@ namespace AudioProcessor.Tests.Domain
                     return;
                 case AudioProcessingStatus.Failed:
                     record.MarkAsFailed(10);
+                    return;
+            }
+        }
+
+        private static void DriveNoiseReductionTo(AudioRecord record, AudioNoiseReductionStatus target)
+        {
+            switch (target)
+            {
+                case AudioNoiseReductionStatus.Pending:
+                    return;
+                case AudioNoiseReductionStatus.Processing:
+                    record.MarkNoiseReductionAsProcessing();
+                    return;
+                case AudioNoiseReductionStatus.Completed:
+                    record.MarkNoiseReductionAsCompleted("https://example.supabase.co/audio-files/filtered.aac", 10);
+                    return;
+                case AudioNoiseReductionStatus.Failed:
+                    record.MarkNoiseReductionAsFailed("error", 10);
                     return;
             }
         }

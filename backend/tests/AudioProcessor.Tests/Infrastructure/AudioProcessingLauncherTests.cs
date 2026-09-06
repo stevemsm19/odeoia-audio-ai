@@ -98,6 +98,11 @@ namespace AudioProcessor.Tests.Infrastructure
                 .Setup(c => c.CompressToAacAsync(It.IsAny<Stream>(), record.FileName, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new MemoryStream(new byte[] { 9, 9, 9 }));
 
+            var mockNoiseReductionService = new Mock<IAudioNoiseReductionService>();
+            mockNoiseReductionService
+                .Setup(n => n.ReduceNoiseAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new MemoryStream(new byte[] { 7, 7, 7 }));
+
             var mockTranscriptionService = new Mock<IAudioTranscriptionService>();
             mockTranscriptionService
                 .Setup(s => s.TranscribeAsync(It.IsAny<Stream>(), record.FileName, It.IsAny<CancellationToken>()))
@@ -118,6 +123,7 @@ namespace AudioProcessor.Tests.Infrastructure
             services.AddSingleton(mockAudioRepository.Object);
             services.AddSingleton(new HttpClient(mockHttpMessageHandler.Object));
             services.AddSingleton(mockCompressionService.Object);
+            services.AddSingleton(mockNoiseReductionService.Object);
             services.AddSingleton(mockTranscriptionService.Object);
             services.AddSingleton(mockSummarizationService.Object);
             services.AddSingleton(mockStorageService.Object);

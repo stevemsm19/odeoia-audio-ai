@@ -23,17 +23,20 @@ namespace AudioProcessor.Application.UseCases
         private readonly IAudioRepository _audioRepository;
         private readonly IAudioStorageService _audioStorageService;
         private readonly IAudioCompressionService _audioCompressionService;
+        private readonly IAudioNoiseReductionService _audioNoiseReductionService;
         private readonly ILogger<ProcessAudioCompressionCommandHandler> _logger;
 
         public ProcessAudioCompressionCommandHandler(
             IAudioRepository audioRepository,
             IAudioStorageService audioStorageService,
             IAudioCompressionService audioCompressionService,
+            IAudioNoiseReductionService audioNoiseReductionService,
             ILogger<ProcessAudioCompressionCommandHandler> logger)
         {
             _audioRepository = audioRepository ?? throw new ArgumentNullException(nameof(audioRepository));
             _audioStorageService = audioStorageService ?? throw new ArgumentNullException(nameof(audioStorageService));
             _audioCompressionService = audioCompressionService ?? throw new ArgumentNullException(nameof(audioCompressionService));
+            _audioNoiseReductionService = audioNoiseReductionService ?? throw new ArgumentNullException(nameof(audioNoiseReductionService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -97,6 +100,8 @@ namespace AudioProcessor.Application.UseCases
                 await _audioRepository.UpdateAudioRecordAsync(record, cancellationToken);
                 AudioPerformanceLog.Write(_logger, audioRecordId, "Compression", correlationId, "DatabaseUpdate", "Completed", databaseUpdate.ElapsedMilliseconds);
 
+                await RunNoiseReductionAsync(record, compressedStream, compressedFileName, correlationId, cancellationToken);
+
                 AudioPerformanceLog.Write(_logger, audioRecordId, "Compression", correlationId, "EndToEnd", "Completed", total.ElapsedMilliseconds);
             }
             catch (Exception ex)
@@ -123,6 +128,67 @@ namespace AudioProcessor.Application.UseCases
                 if (compressedStream != null)
                 {
                     await compressedStream.DisposeAsync();
+                }
+            }
+        }
+
+        private async Task RunNoiseReductionAsync(
+            AudioRecord record,
+            Stream compressedStream,
+            string compressedFileName,
+            string correlationId,
+            CancellationToken cancellationToken)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            Stream? filteredStream = null;
+
+            try
+            {
+                record.MarkNoiseReductionAsProcessing();
+                await _audioRepository.UpdateAudioRecordAsync(record, cancellationToken);
+
+                compressedStream.Position = 0;
+
+                var noiseReduction = Stopwatch.StartNew();
+                filteredStream = await _audioNoiseReductionService.ReduceNoiseAsync(compressedStream, compressedFileName, cancellationToken);
+                AudioPerformanceLog.Write(_logger, record.Id, "NoiseReduction", correlationId, "NoiseReduction", "Completed", noiseReduction.ElapsedMilliseconds);
+
+                var upload = Stopwatch.StartNew();
+                string filteredStorageUrl = await _audioStorageService.UploadAudioAsync(
+                    filteredStream,
+                    "filtered.aac",
+                    "audio/aac",
+                    record.Id,
+                    cancellationToken);
+                AudioPerformanceLog.Write(_logger, record.Id, "NoiseReduction", correlationId, "FilteredAudioUpload", "Completed", upload.ElapsedMilliseconds);
+
+                stopwatch.Stop();
+                record.MarkNoiseReductionAsCompleted(filteredStorageUrl, stopwatch.ElapsedMilliseconds);
+                await _audioRepository.UpdateAudioRecordAsync(record, cancellationToken);
+                AudioPerformanceLog.Write(_logger, record.Id, "NoiseReduction", correlationId, "EndToEnd", "Completed", stopwatch.ElapsedMilliseconds);
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                _logger.LogError(ex, "An error occurred during noise reduction processing for Record ID: {Id}", record.Id);
+
+                try
+                {
+                    record.MarkNoiseReductionAsFailed(ex.Message, stopwatch.ElapsedMilliseconds);
+                    await _audioRepository.UpdateAudioRecordAsync(record, cancellationToken);
+                }
+                catch (Exception dbEx)
+                {
+                    _logger.LogError(dbEx, "Failed to mark record {Id} as Failed for noise reduction in the database.", record.Id);
+                }
+
+                AudioPerformanceLog.Write(_logger, record.Id, "NoiseReduction", correlationId, "EndToEnd", "Failed", stopwatch.ElapsedMilliseconds);
+            }
+            finally
+            {
+                if (filteredStream != null)
+                {
+                    await filteredStream.DisposeAsync();
                 }
             }
         }

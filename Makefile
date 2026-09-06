@@ -20,9 +20,9 @@ help: ## Show available commands
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "$(CYAN)%-25s$(NC) %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo ""
 
-init: setup-hooks download-models run ## Initialize Local Development (Setup hooks, models, and run API)
+init: download-models run ## Initialize Local Development (Setup hooks, models, and run API)
 
-init-docker: setup-hooks download-models docker-up ## Initialize Containerized Development (Setup hooks, models, and run Docker)
+init-docker: download-models docker-up ## Initialize Containerized Development (Setup hooks, models, and run Docker)
 
 download-models: ## Provision missing local Whisper and GGUF models
 	./scripts/download-models.sh

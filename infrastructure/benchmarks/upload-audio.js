@@ -57,6 +57,8 @@ const transcriptionDuration = new Trend("transcription_duration", true);
 const summaryDuration = new Trend("summary_duration", true);
 
 export default function () {
+  sleep(Math.random() * 2);
+  
   const pipelineStart = Date.now();
 
   const uploadRes = http.post(`${BASE_URL}/api/audio/upload`, {

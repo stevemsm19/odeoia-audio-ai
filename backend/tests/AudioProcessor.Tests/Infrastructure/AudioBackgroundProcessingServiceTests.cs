@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -89,6 +91,7 @@ namespace AudioProcessor.Tests.Infrastructure
                 {
                     var record = pending.Single(r => r.Id == id);
                     record.MarkAsCompleted("https://example.supabase.co/audio-files/compressed.aac", 5);
+                    record.MarkNoiseReductionAsCompleted("https://example.supabase.co/audio-files/filtered.aac", 5);
                     record.MarkTranscriptionAsCompleted(5);
                     record.MarkSummaryAsCompleted("https://example.supabase.co/audio-files/summary.txt", 5);
                     return Task.CompletedTask;
@@ -161,6 +164,7 @@ namespace AudioProcessor.Tests.Infrastructure
                         await Task.Delay(processingDelay, ct);
                         var record = pending.Single(r => r.Id == id);
                         record.MarkAsCompleted("https://example.supabase.co/audio-files/compressed.aac", 5);
+                        record.MarkNoiseReductionAsCompleted("https://example.supabase.co/audio-files/filtered.aac", 5);
                         record.MarkTranscriptionAsCompleted(5);
                         record.MarkSummaryAsCompleted("https://example.supabase.co/audio-files/summary.txt", 5);
                     }
@@ -191,6 +195,90 @@ namespace AudioProcessor.Tests.Infrastructure
             Assert.True(maxObservedConcurrent <= maxDegreeOfParallelism,
                 $"MaxDegreeOfParallelism={maxDegreeOfParallelism} was violated: observed {maxObservedConcurrent} audios processing at once.");
             Assert.Equal(maxDegreeOfParallelism, maxObservedConcurrent);
+        }
+
+        /// <summary>
+        /// Reproduces exactly the scenario from the profiling analysis: a slot freed by an
+        /// audio claimed on one poll must be handed to an audio claimed on a *later* poll
+        /// immediately, instead of making that later audio wait for every audio from the
+        /// earlier poll's claim to finish. With the previous batch-and-await implementation
+        /// this audio would only start once the whole first claim (including the slow one)
+        /// drained — i.e. around slowRecord's ~400ms completion, not near-instantly.
+        /// </summary>
+        [Fact]
+        public async Task ExecuteAsync_DispatchesALaterClaimedAudioAsSoonAsASlotFrees_WithoutWaitingForTheEarlierClaimToDrain()
+        {
+            const int maxDegreeOfParallelism = 2;
+            var pollInterval = TimeSpan.FromMilliseconds(30);
+            var slowDelay = TimeSpan.FromMilliseconds(400);
+            var fastDelay = TimeSpan.FromMilliseconds(20);
+
+            var slowRecord = NewPendingRecord();
+            var fastRecord = NewPendingRecord();
+            var lateArrivalRecord = NewPendingRecord();
+            var firstClaim = new List<AudioRecord> { slowRecord, fastRecord };
+            var secondClaim = new List<AudioRecord> { lateArrivalRecord };
+            var allRecords = new List<AudioRecord> { slowRecord, fastRecord, lateArrivalRecord };
+
+            int pollCount = 0;
+            var mockRepository = new Mock<IAudioRepository>();
+            mockRepository
+                .Setup(r => r.GetPendingAudioRecordsAsync(It.IsAny<CancellationToken>()))
+                .Returns(() =>
+                {
+                    IReadOnlyList<AudioRecord> result = Interlocked.Increment(ref pollCount) switch
+                    {
+                        1 => firstClaim,
+                        2 => secondClaim,
+                        _ => Array.Empty<AudioRecord>(),
+                    };
+                    return Task.FromResult(result);
+                });
+            mockRepository
+                .Setup(r => r.UpdateAudioRecordAsync(It.IsAny<AudioRecord>(), It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+
+            var stopwatch = Stopwatch.StartNew();
+            var startedAt = new ConcurrentDictionary<Guid, TimeSpan>();
+
+            var mockLauncher = new Mock<IAudioProcessingLauncher>();
+            mockLauncher
+                .Setup(l => l.ProcessAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .Returns(async (Guid id, string _, CancellationToken ct) =>
+                {
+                    startedAt[id] = stopwatch.Elapsed;
+                    await Task.Delay(id == slowRecord.Id ? slowDelay : fastDelay, ct);
+                    var record = allRecords.Single(r => r.Id == id);
+                    record.MarkAsCompleted("https://example.supabase.co/audio-files/compressed.aac", 5);
+                    record.MarkNoiseReductionAsCompleted("https://example.supabase.co/audio-files/filtered.aac", 5);
+                    record.MarkTranscriptionAsCompleted(5);
+                    record.MarkSummaryAsCompleted("https://example.supabase.co/audio-files/summary.txt", 5);
+                });
+
+            var (service, provider) = BuildService(mockRepository, mockLauncher, pollInterval, maxDegreeOfParallelism);
+            using (provider as IDisposable)
+            {
+                await service.StartAsync(CancellationToken.None);
+                try
+                {
+                    bool allCompleted = WaitUntil(
+                        () => allRecords.All(r => r.OverallStatus == AudioOverallStatus.Completed),
+                        TimeSpan.FromSeconds(3));
+
+                    Assert.True(allCompleted,
+                        $"Expected all three audios to complete. statuses={string.Join(",", allRecords.Select(r => r.OverallStatus))}");
+                }
+                finally
+                {
+                    await service.StopAsync(CancellationToken.None);
+                }
+            }
+
+            Assert.True(startedAt.ContainsKey(lateArrivalRecord.Id), "lateArrivalRecord was never dispatched.");
+            Assert.True(startedAt[lateArrivalRecord.Id] < TimeSpan.FromMilliseconds(250),
+                $"lateArrivalRecord started at {startedAt[lateArrivalRecord.Id].TotalMilliseconds}ms — expected it to " +
+                $"start well before slowRecord's ~{slowDelay.TotalMilliseconds}ms completion, by taking the slot " +
+                "fastRecord freed. Starting this late suggests it waited for the whole earlier claim to drain first.");
         }
 
         private static void InterlockedMax(ref int target, int candidate)

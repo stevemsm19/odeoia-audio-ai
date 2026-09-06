@@ -12,6 +12,7 @@ import {
 import {
   AudioProcessingError,
   processAudio,
+  toAacFileName,
   type AudioProcessingResult,
   type AudioProcessingSnapshot,
 } from "../../services/audioService";
@@ -23,7 +24,8 @@ type ValidationState = "idle" | "checking" | "valid" | "invalid";
 const hasAnyFailure = (result: AudioProcessingResult): boolean =>
   result.compressionStatus === "Failed" ||
   result.transcriptionStatus === "Failed" ||
-  result.summaryStatus === "Failed";
+  result.summaryStatus === "Failed" ||
+  result.noiseReductionStatus === "Failed";
 
 export function HomePage() {
   const { user } = useAuth();
@@ -189,6 +191,7 @@ export function HomePage() {
             {(state === "processing" || state === "completed") && pipeline && (
               <PipelineStatus
                 compressionStatus={pipeline.compressionStatus}
+                noiseReductionStatus={pipeline.noiseReductionStatus}
                 transcriptionStatus={pipeline.transcriptionStatus}
                 summaryStatus={pipeline.summaryStatus}
               />
@@ -236,9 +239,11 @@ export function HomePage() {
                   size="large"
                   fileName={result.originalFileName}
                   audioUrl={result.processedAudioUrl}
-                  downloadFileName={result.originalFileName.replace(
-                    /\.[^.]+$/,
-                    ".aac",
+                  downloadFileName={toAacFileName(result.originalFileName)}
+                  filteredAudioUrl={result.filteredAudioUrl}
+                  filteredDownloadFileName={toAacFileName(result.originalFileName).replace(
+                    /\.aac$/,
+                    "-filtered.aac",
                   )}
                   summary={{
                     text: result.summaryText,

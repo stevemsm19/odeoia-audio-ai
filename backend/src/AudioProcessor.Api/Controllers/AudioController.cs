@@ -99,7 +99,11 @@ namespace AudioProcessor.Api.Controllers
                 record.SummaryStatus.ToString(),
                 record.SummaryStorageUrl,
                 record.SummaryError,
-                record.SummaryDurationMs));
+                record.SummaryDurationMs,
+                record.NoiseReductionStatus.ToString(),
+                record.FilteredStorageUrl,
+                record.NoiseReductionError,
+                record.NoiseReductionDurationMs));
         }
 
         /// <summary>
@@ -124,7 +128,8 @@ namespace AudioProcessor.Api.Controllers
                 r.CompressedStorageUrl,
                 r.OverallStatus.ToString(),
                 r.SummaryStorageUrl,
-                r.CreatedAt));
+                r.CreatedAt,
+                r.FilteredStorageUrl));
 
             return Ok(response);
         }
@@ -139,7 +144,8 @@ namespace AudioProcessor.Api.Controllers
         string? CompressedStorageUrl,
         string OverallStatus,
         string? SummaryStorageUrl,
-        DateTime CreatedAt);
+        DateTime CreatedAt,
+        string? FilteredStorageUrl);
 
     public record AudioProcessingStatusResponse(
         Guid Id,
@@ -154,5 +160,9 @@ namespace AudioProcessor.Api.Controllers
         string SummaryStatus,
         string? SummaryStorageUrl,
         string? SummaryError,
-        long? SummaryDurationMs);
+        long? SummaryDurationMs,
+        string NoiseReductionStatus,
+        string? FilteredStorageUrl,
+        string? NoiseReductionError,
+        long? NoiseReductionDurationMs);
 }
