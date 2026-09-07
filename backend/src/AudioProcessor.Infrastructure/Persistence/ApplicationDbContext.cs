@@ -3,10 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AudioProcessor.Infrastructure.Persistence
 {
-    /// <summary>
-    /// Represents the Entity Framework Core database context.
-    /// Responsible for configuring entity mappings, table names, and defining the data schema for the domain model.
-    /// </summary>
+    // EF Core mapping for the audio_records table.
     public class ApplicationDbContext : DbContext
     {
         public DbSet<AudioRecord> AudioRecords { get; set; } = null!;

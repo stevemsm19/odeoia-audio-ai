@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 
 namespace AudioProcessor.Application.Interfaces
 {
+    // Noise reduction stage contract.
     public interface IAudioNoiseReductionService
     {
         Task<Stream> ReduceNoiseAsync(

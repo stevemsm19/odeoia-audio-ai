@@ -11,10 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace AudioProcessor.Api.Controllers
 {
-    /// <summary>
-    /// Handles incoming HTTP requests for audio processing.
-    /// Exposes endpoints for uploading raw audio files and launching their background processing flows.
-    /// </summary>
+    // HTTP endpoints for uploading audio and querying processing status.
     [ApiController]
     [Route("api/audio")]
     public class AudioController : ControllerBase
@@ -30,11 +27,7 @@ namespace AudioProcessor.Api.Controllers
             _audioRepository = audioRepository ?? throw new ArgumentNullException(nameof(audioRepository));
         }
 
-        /// <summary>
-        /// Uploads an audio file (.mp3 or .wav) to Supabase storage, records its metadata in the
-        /// database as <c>Pending</c>, and returns immediately — the background processing
-        /// service picks it up and runs its two processing flows asynchronously.
-        /// </summary>
+        // Stores the file and returns immediately as Pending — processing happens in the background.
         [HttpPost("upload")]
         [ProducesResponseType(typeof(AudioUploadResponse), StatusCodes.Status202Accepted)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -51,7 +44,6 @@ namespace AudioProcessor.Api.Controllers
 
             await using Stream fileStream = file.OpenReadStream();
 
-            // 1. Store original file and record in database with initial status (Pending)
             var audioRecord = await _uploadAudioUseCase.ExecuteAsync(
                 fileStream,
                 file.FileName,
@@ -60,8 +52,6 @@ namespace AudioProcessor.Api.Controllers
                 cancellationToken: cancellationToken
             );
 
-            // 2. The record stays Pending — the background processing service claims it
-            // and runs its two processing flows on its own schedule.
             var response = new AudioUploadResponse(
                 audioRecord.Id,
                 audioRecord.FileName,
@@ -69,14 +59,10 @@ namespace AudioProcessor.Api.Controllers
                 audioRecord.Status.ToString(),
                 audioRecord.CreatedAt);
 
-            // 3. Return HTTP 202 Accepted to signal that the upload was accepted for processing
             return Accepted(response);
         }
 
-        /// <summary>
-        /// Returns per-stage status plus <see cref="AudioProcessingStatusResponse.OverallStatus"/> —
-        /// never Failed, used only by the frontend to decide when to stop polling.
-        /// </summary>
+        // Per-stage status; OverallStatus is never Failed, used to decide when to stop polling.
         [HttpGet("{id:guid}")]
         [ProducesResponseType(typeof(AudioProcessingStatusResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -106,10 +92,6 @@ namespace AudioProcessor.Api.Controllers
                 record.NoiseReductionDurationMs));
         }
 
-        /// <summary>
-        /// Lists every audio record associated with the given user email, newest first.
-        /// Used by the "List Audios" frontend section.
-        /// </summary>
         [HttpGet]
         [ProducesResponseType(typeof(IEnumerable<AudioListItemResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]

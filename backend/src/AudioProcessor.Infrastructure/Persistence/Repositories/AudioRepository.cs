@@ -10,10 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AudioProcessor.Infrastructure.Persistence.Repositories
 {
-    /// <summary>
-    /// Implements data access operations using Entity Framework Core.
-    /// Acts as the concrete infrastructure adapter for the application's repository interface.
-    /// </summary>
+    // EF Core adapter for IAudioRepository.
     public class AudioRepository : IAudioRepository
     {
         private readonly ApplicationDbContext _dbContext;
@@ -41,9 +38,7 @@ namespace AudioProcessor.Infrastructure.Persistence.Repositories
         /// <inheritdoc />
         public async Task UpdateAudioRecordAsync(AudioRecord audioRecord, CancellationToken cancellationToken = default)
         {
-            // Records returned by this repository are tracked in the scoped DbContext.
-            // Saving detected changes prevents a summary worker from overwriting fields
-            // updated concurrently by a compression worker with stale values.
+            // Saves tracked changes only — avoids a concurrent worker overwriting fields with stale values.
             await _dbContext.SaveChangesAsync(cancellationToken);
             await _statusNotifier.NotifyStatusChangedAsync(audioRecord.Id, cancellationToken);
         }

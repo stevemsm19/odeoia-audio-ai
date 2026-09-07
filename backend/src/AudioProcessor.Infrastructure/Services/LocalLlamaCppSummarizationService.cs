@@ -9,11 +9,7 @@ using Microsoft.Extensions.Options;
 
 namespace AudioProcessor.Infrastructure.Services
 {
-    /// <summary>
-    /// Summarization stage of Flujo 2. Invokes <c>audio_summary_worker.py</c>
-    /// (llama.cpp) as an independent subprocess, receiving the transcript over
-    /// stdin — never written to disk or persisted.
-    /// </summary>
+    // Summary stage — runs llama.cpp (LLM) via a Python subprocess; transcript passed over stdin, never written to disk.
     public class LocalLlamaCppSummarizationService : IAudioSummarizationService
     {
         private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };

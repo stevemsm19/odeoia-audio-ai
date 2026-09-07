@@ -17,10 +17,8 @@ type AudioResultProps = {
 };
 
 /**
- * Shared "processed audio" view: player(s), download link(s), and summary. Used at
- * "large" size for HomePage's single result and "compact" size for each row
- * in the List Audios page — same shape, different scale. The file name is
- * shown by AudioPlayer itself, so no separate heading/badge is needed here.
+ * Shared "processed audio" view (player, download, summary) — reused at "large"
+ * size on HomePage and "compact" size per row in List Audios.
  */
 export function AudioResult({
   fileName,

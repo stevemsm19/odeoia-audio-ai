@@ -9,10 +9,7 @@ using Microsoft.Extensions.Logging;
 
 namespace AudioProcessor.Infrastructure.Services
 {
-    /// <summary>
-    /// Implements audio compression by acting as an external process wrapper over the FFmpeg CLI tool.
-    /// Manages temporary file streaming, process execution, error redirection, and memory stream construction for optimized outputs.
-    /// </summary>
+    // Compresses audio to AAC by shelling out to the FFmpeg CLI.
     public class FFmpegAudioCompressionService : IAudioCompressionService
     {
         private readonly SemaphoreSlim _externalProcessSemaphore;
@@ -75,10 +72,7 @@ namespace AudioProcessor.Infrastructure.Services
             var startInfo = new ProcessStartInfo
             {
                 FileName = "ffmpeg",
-                // -y: Overwrite output file
-                // -i: Input path
-                // -c:a aac: AAC codec
-                // -b:a 192k: High-quality audio bitrate
+                // AAC re-encode at 192k, overwriting the output file.
                 Arguments = $"-y -i \"{inputPath}\" -c:a aac -b:a 192k \"{outputPath}\"",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,

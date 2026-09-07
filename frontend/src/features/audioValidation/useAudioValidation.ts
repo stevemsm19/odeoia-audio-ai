@@ -25,11 +25,7 @@ export interface UseAudioValidationReturn {
 const SAMPLE_RATE = 16000; // Target sample rate for STT
 const MIN_TRANSCRIPT_LENGTH = 10; // Minimum character count for "speech detected"
 
-/**
- * Resample audio to target sample rate
- * Mixes all channels to mono and resamples via linear interpolation
- * Returns a Float32Array of mono audio at the target sample rate
- */
+/** Mixes down to mono and resamples to the target sample rate. */
 async function resampleAudio(
   audioBuffer: AudioBuffer,
   targetSampleRate: number
@@ -55,19 +51,12 @@ async function resampleAudio(
   return sourceData;
 }
 
-/**
- * Hook for client-side audio validation
- * Implements two-tier validation: magic byte check, then STT inference
- * Manages Web Worker lifecycle and validation state machine
- */
+// Client-side audio validation: magic byte check, then STT inference in a Web Worker.
 export function useAudioValidation(): UseAudioValidationReturn {
   const [state, setState] = useState<AudioValidationState>({ status: "idle" });
   const workerRef = useRef<Worker | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  /**
-   * Create and initialize the worker lazily on first validation
-   */
   const getOrCreateWorker = (): Worker => {
     if (!workerRef.current) {
       // Create a module worker for ESM support
@@ -79,9 +68,6 @@ export function useAudioValidation(): UseAudioValidationReturn {
     return workerRef.current;
   };
 
-  /**
-   * Validate audio file through multi-stage pipeline
-   */
   const validate = async (file: File): Promise<void> => {
     // Cancel any previous validation
     if (abortControllerRef.current) {

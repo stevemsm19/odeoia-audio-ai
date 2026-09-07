@@ -10,10 +10,7 @@ using Supabase;
 
 namespace AudioProcessor.Infrastructure.Storage
 {
-    /// <summary>
-    /// Implements external object storage interactions by acting as an adapter for the Supabase Storage API.
-    /// Manages byte streams, object paths, bucket authorization, and public URL generation.
-    /// </summary>
+    // Supabase Storage adapter for uploaded audio/summary files.
     public class SupabaseStorageService : IAudioStorageService
     {
         private readonly Client _supabaseClient;

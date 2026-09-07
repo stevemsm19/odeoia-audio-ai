@@ -11,20 +11,8 @@ using Microsoft.Extensions.Logging;
 
 namespace AudioProcessor.Infrastructure.Services
 {
-    /// <summary>
-    /// Polls for uploaded audios still in <c>Pending</c>, claims them by marking them
-    /// <c>Processing</c>, and dispatches each onto a fixed-size pool of
-    /// <c>MaxDegreeOfParallelism</c> slots (a <see cref="SemaphoreSlim"/>). As soon as any
-    /// slot frees up — regardless of which poll tick claimed the audio occupying it — the
-    /// next claimed-but-not-yet-started audio takes it immediately. This makes the sliding
-    /// window span the whole claimed backlog, not just the audios claimed in a single poll:
-    /// a new poll's claims join the same pool as any audios still running from a previous
-    /// poll, instead of waiting for that previous poll's entire claim to drain first.
-    /// <c>MaxDegreeOfParallelism</c> is the system-level admission control on how many
-    /// *whole audios* run at once — a different layer from the global <c>SemaphoreSlim</c>
-    /// that limits concurrent heavy external processes inside a single flow, and from the
-    /// <c>Task.WhenAll</c> that runs the two flows of one audio concurrently.
-    /// </summary>
+    // Polls for Pending audios and admits up to MaxDegreeOfParallelism at once through a
+    // SemaphoreSlim slot pool — a sliding window over the whole backlog, not a per-poll batch.
     public class AudioBackgroundProcessingService : BackgroundService
     {
         private const int DefaultPollIntervalSeconds = 3;
@@ -65,18 +53,14 @@ namespace AudioProcessor.Infrastructure.Services
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
-                        // A transient failure here (e.g. the database is briefly unreachable)
-                        // must not kill the loop for the rest of the process's lifetime.
+                        // Transient failures (e.g. DB briefly unreachable) must not kill the polling loop.
                         _logger.LogError(ex, "Unexpected failure while polling for pending audios — will retry on the next tick.");
                     }
                 } while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false));
             }
             finally
             {
-                // The loop above only dispatches work — it never waits for it to finish, so
-                // audios claimed by the last poll (or an earlier one that hadn't drained yet)
-                // could still be running here. Wait for them so the host doesn't tear down the
-                // DI container out from under a task that's mid-flight.
+                // Wait for still-running audios before the host tears down the DI container.
                 await DrainInFlightAsync().ConfigureAwait(false);
             }
         }
@@ -104,11 +88,9 @@ namespace AudioProcessor.Infrastructure.Services
             _logger.LogInformation("Claimed {Count} pending audio(s) for background processing (max degree of parallelism: {MaxDop}).",
                 claimedIds.Count, _maxDegreeOfParallelism);
 
+            // Semaphore admission control: blocks only when all slots are occupied.
             foreach (var audioId in claimedIds)
             {
-                // Blocks only when every slot is already occupied by audios still running —
-                // possibly claimed by an earlier poll tick. As soon as any one of them
-                // finishes, this (or the next waiting) audio takes the freed slot immediately.
                 await _slots.WaitAsync(stoppingToken).ConfigureAwait(false);
                 Dispatch(audioId, stoppingToken);
             }
@@ -129,8 +111,6 @@ namespace AudioProcessor.Infrastructure.Services
         {
             try
             {
-                // Each audio gets its own DI scope so it resolves its own launcher/handlers
-                // instead of sharing state across concurrently dispatched audios.
                 using var scope = _scopeFactory.CreateScope();
                 var launcher = scope.ServiceProvider.GetRequiredService<IAudioProcessingLauncher>();
                 await launcher.ProcessAsync(audioId, correlationId: $"background-{audioId}", stoppingToken);

@@ -11,11 +11,7 @@ using Microsoft.Extensions.Options;
 
 namespace AudioProcessor.Infrastructure.Services
 {
-    /// <summary>
-    /// Speech-to-text stage of Flujo 2. Invokes <c>audio_transcription_worker.py</c>
-    /// (whisper.cpp) as an independent subprocess — a separate invocation from
-    /// summarization.
-    /// </summary>
+    // Transcription stage — runs whisper.cpp via a Python subprocess worker.
     public class LocalWhisperCppTranscriptionService : IAudioTranscriptionService
     {
         private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };

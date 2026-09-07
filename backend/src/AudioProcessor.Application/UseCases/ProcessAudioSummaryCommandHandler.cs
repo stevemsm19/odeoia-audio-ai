@@ -11,12 +11,8 @@ using Microsoft.Extensions.Logging;
 
 namespace AudioProcessor.Application.UseCases
 {
-    /// <summary>
-    /// Orchestrates Flujo 2 (Transcription → Summary). The two stages are independent
-    /// external process invocations: if transcription fails, summarization is never
-    /// attempted, and there is no transcript to fall back on because it is never
-    /// persisted.
-    /// </summary>
+    // Transcription → Summary stage. The transcript lives only in memory, so a failed
+    // transcription skips summarization entirely — there's nothing to fall back on.
     public class ProcessAudioSummaryCommandHandler
     {
         private readonly IAudioRepository _audioRepository;
@@ -39,13 +35,7 @@ namespace AudioProcessor.Application.UseCases
             _logger = logger;
         }
 
-        /// <param name="audioRecordId">The unique identifier of the audio record to process.</param>
-        /// <param name="originalAudioStream">The original audio, already downloaded by the caller and shared with the other flow.</param>
-        /// <param name="correlationId">Identifier used to correlate performance log entries across both flows for the same request.</param>
-        /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-        /// <remarks>
-        /// Failures in either stage are fully handled here (logged, persisted as <c>Failed</c>) and never rethrown.
-        /// </remarks>
+        // Failures in either stage are logged and persisted as Failed here, never rethrown.
         public async Task HandleAsync(Guid audioRecordId, Stream originalAudioStream, string correlationId, CancellationToken cancellationToken = default)
         {
             var total = Stopwatch.StartNew();
@@ -60,8 +50,7 @@ namespace AudioProcessor.Application.UseCases
             await RunSummarizationAsync(record, transcript, correlationId, total, cancellationToken);
         }
 
-        /// <returns>The transcript, or <c>null</c> if transcription failed (already
-        /// persisted as Failed for both Transcription and Summary — nothing left to do).</returns>
+        // Returns null if transcription failed (both stages already persisted as Failed).
         private async Task<string?> RunTranscriptionAsync(Domain.Entities.AudioRecord record, Stream originalAudioStream, string correlationId, Stopwatch total, CancellationToken cancellationToken)
         {
             var stageStopwatch = Stopwatch.StartNew();
@@ -89,8 +78,6 @@ namespace AudioProcessor.Application.UseCases
                 stageStopwatch.Stop();
                 _logger.LogError(ex, "Transcription failed for record {Id}", record.Id);
 
-                // Transcription is a strict prerequisite for Summary, and the transcript
-                // is never persisted, so there is nothing to reuse.
                 record.MarkTranscriptionAsFailed(ex.Message, stageStopwatch.ElapsedMilliseconds);
                 record.MarkSummaryAsFailed("Summary was not attempted because transcription failed.", 0);
                 await _audioRepository.UpdateAudioRecordAsync(record, CancellationToken.None);

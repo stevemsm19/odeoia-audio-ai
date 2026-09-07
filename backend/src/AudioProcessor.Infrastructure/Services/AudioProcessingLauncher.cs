@@ -12,13 +12,7 @@ using Microsoft.Extensions.Logging;
 
 namespace AudioProcessor.Infrastructure.Services
 {
-    /// <summary>
-    /// Downloads the original audio once, then runs the two flows (Compression;
-    /// Transcription→Summary) as independent <see cref="Task"/>s via <c>Task.Run</c>,
-    /// each with its own DI scope (EF Core's <c>DbContext</c> is not thread-safe to
-    /// share). <see cref="ProcessAsync"/> completes only once both flows have reached
-    /// a terminal state.
-    /// </summary>
+    // Runs Compression and Transcription→Summary as independent tasks (TPL), each in its own DI scope.
     public class AudioProcessingLauncher : IAudioProcessingLauncher
     {
         private readonly IServiceScopeFactory _scopeFactory;
@@ -38,6 +32,7 @@ namespace AudioProcessor.Infrastructure.Services
                 if (originalAudioBytes is null)
                     return;
 
+                // Concurrent flows: compression and transcription+summary don't depend on each other.
                 Task compressionTask = Task.Run(() => RunFlowAsync<ProcessAudioCompressionCommandHandler>(
                     "Compression", audioRecordId, correlationId, originalAudioBytes,
                     (handler, id, corrId, stream, ct) => handler.HandleAsync(id, stream, corrId, ct),
@@ -58,12 +53,7 @@ namespace AudioProcessor.Infrastructure.Services
             }
         }
 
-        /// <summary>
-        /// Downloads the original audio a single time so both flows can share it in
-        /// memory instead of each independently re-downloading it from Storage.
-        /// </summary>
-        /// <returns>The audio bytes, or <c>null</c> if the record wasn't found or the
-        /// download failed (in which case every stage is already persisted as Failed).</returns>
+        // Downloads the audio once so both flows share it in memory instead of re-fetching from Storage.
         private async Task<byte[]?> DownloadOriginalAudioAsync(Guid audioRecordId, string correlationId, CancellationToken cancellationToken)
         {
             var stopwatch = Stopwatch.StartNew();
@@ -120,9 +110,7 @@ namespace AudioProcessor.Infrastructure.Services
             CancellationToken cancellationToken)
             where THandler : notnull
         {
-            // Must wrap the entire flow body: an uncaught exception here would only
-            // ever come from DI/scope setup, since every handler already contains
-            // and persists its own failures.
+            // Only DI/scope failures land here — handlers persist their own errors.
             try
             {
                 using var scope = _scopeFactory.CreateScope();

@@ -7,11 +7,7 @@ using AudioProcessor.Domain.Entities;
 
 namespace AudioProcessor.Application.UseCases
 {
-    /// <summary>
-    /// Coordinates the upload workflow for raw audio files.
-    /// This use case handles transferring the file stream to the cloud/external storage,
-    /// generating a tracking record in the persistent repository, and returning the initialized domain entity.
-    /// </summary>
+    // Uploads the raw audio file to storage and creates its tracking record.
     public class UploadAudioUseCase
     {
         private readonly IAudioStorageService _audioStorageService;
@@ -23,15 +19,6 @@ namespace AudioProcessor.Application.UseCases
             _audioRepository = audioRepository;
         }
 
-        /// <summary>
-        /// Executes the upload and registration flow.
-        /// </summary>
-        /// <param name="fileStream">The stream containing raw audio data.</param>
-        /// <param name="fileName">The original file name of the audio.</param>
-        /// <param name="contentType">The media/MIME type of the audio file.</param>
-        /// <param name="userEmail">Optional email of the uploading user, used to associate the audio with them.</param>
-        /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-        /// <returns>A newly created <see cref="AudioRecord"/> indicating successful upload and registration.</returns>
         public async Task<AudioRecord> ExecuteAsync(
             Stream fileStream, string fileName, string contentType,
             string? userEmail = null, CancellationToken cancellationToken = default)

@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 
 namespace AudioProcessor.Infrastructure.Services
 {
+    // Reduces background noise via FFmpeg's afftdn filter (runs after compression).
     public class FFmpegAudioNoiseReductionService : IAudioNoiseReductionService
     {
         private readonly SemaphoreSlim _externalProcessSemaphore;
@@ -70,11 +71,7 @@ namespace AudioProcessor.Infrastructure.Services
             var startInfo = new ProcessStartInfo
             {
                 FileName = "ffmpeg",
-                // -af afftdn: FFT-based denoiser filter.
-                // tn=1 makes it continuously track the noise floor from the audio itself
-                // instead of assuming a fixed -50dB profile; nr/nf are raised so the
-                // reduction is actually audible on real background noise (defaults are
-                // tuned for faint hiss, not room/background noise).
+                // nr/nf/tn raised above FFmpeg defaults, which are tuned for faint hiss, not room noise.
                 Arguments = $"-y -i \"{inputPath}\" -af afftdn=nr=25:nf=-35:tn=1 -c:a aac -b:a 192k \"{outputPath}\"",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,

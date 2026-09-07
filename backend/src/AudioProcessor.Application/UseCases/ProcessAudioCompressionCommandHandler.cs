@@ -13,11 +13,7 @@ using Microsoft.Extensions.Logging;
 
 namespace AudioProcessor.Application.UseCases
 {
-    /// <summary>
-    /// Command handler responsible for executing the asynchronous audio compression workflow.
-    /// It compresses the original audio stream, uploads the resulting AAC stream,
-    /// and updates the record status and execution duration in the persistent repository.
-    /// </summary>
+    // Compression stage: compresses to AAC, uploads it, then runs noise reduction.
     public class ProcessAudioCompressionCommandHandler
     {
         private readonly IAudioRepository _audioRepository;
@@ -40,16 +36,7 @@ namespace AudioProcessor.Application.UseCases
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        /// <summary>
-        /// Orchestrates the compression, upload, and status transition of the specified audio record.
-        /// </summary>
-        /// <param name="audioRecordId">The unique identifier of the audio record to process.</param>
-        /// <param name="originalAudioStream">The original audio, already downloaded by the caller and shared with the other flow.</param>
-        /// <param name="correlationId">Identifier used to correlate performance log entries across both flows for the same request.</param>
-        /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-        /// <remarks>
-        /// Failures are fully handled here (logged, persisted as <c>Failed</c>) and never rethrown.
-        /// </remarks>
+        // Failures are logged and persisted as Failed here, never rethrown.
         public async Task HandleAsync(Guid audioRecordId, Stream originalAudioStream, string correlationId = "none", CancellationToken cancellationToken = default)
         {
             var total = Stopwatch.StartNew();
@@ -132,6 +119,7 @@ namespace AudioProcessor.Application.UseCases
             }
         }
 
+        // Noise reduction stage — post-processes the compressed stream.
         private async Task RunNoiseReductionAsync(
             AudioRecord record,
             Stream compressedStream,
